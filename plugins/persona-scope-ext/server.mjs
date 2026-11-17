@@ -68,7 +68,16 @@ const TOOL_DEFS = [
         cardId: { type: 'string', description: '人设卡 id（来自 persona_scope_list）' },
         openid: { type: 'string', description: '可选。发送者 openid（32 位十六进制）' },
         growthChatId: { type: 'string', description: '可选。要叠加哪个群的成长条目（群 openid）；留空则不叠加' },
+        userLabel: { type: 'string', description: '可选。卡片里 {{user}} 要替换成的称呼（默认「对方」）' },
       },
+    },
+  },
+  {
+    name: 'persona_scope_repair',
+    description: '修复人格库里带 {{占位符}} 的人格（会把它们渲染成纯文本）。这类人格会让整轮没有回复。',
+    schema: {
+      type: 'object', additionalProperties: false,
+      properties: { dryRun: { type: 'boolean', description: 'true = 只报告，不写入' } },
     },
   },
   {
@@ -132,14 +141,17 @@ async function callTool(name, args) {
       try {
         growth = ops.growthInfo({ bySender: host.bySender, byChat: host.byChat, personas: host.personas });
       } catch { /* 只读旁路 */ }
-      return ok({ ...local, ...host, growth, interop: ops.interopStatus(), api: apiReady() ? 'ok' : apiWhy() });
+      let broken = { broken: [] };
+      try { broken = await ops.scanBrokenPersonas(); } catch { /* 旁路 */ }
+      return ok({ ...local, ...host, growth, interop: ops.interopStatus(), brokenPersonas: broken.broken, api: apiReady() ? 'ok' : apiWhy() });
     }
     if (name === 'persona_scope_save_card') return ok(await ops.saveCard(args));
     if (name === 'persona_scope_save_preset') return ok(await ops.savePreset(args));
     if (name === 'persona_scope_apply') {
       if (!apiReady()) return fail(`扩展与宿主的连接不可用：${apiWhy()}`);
-      return ok(await ops.applyCard({ cardId: args?.cardId, openid: args?.openid, growthChatId: args?.growthChatId || '' }));
+      return ok(await ops.applyCard({ cardId: args?.cardId, openid: args?.openid, growthChatId: args?.growthChatId || '', userLabel: args?.userLabel || '' }));
     }
+    if (name === 'persona_scope_repair') return ok(await ops.repairPersonas({ dryRun: args?.dryRun === true }));
     if (name === 'persona_scope_clear_growth') return ok(await ops.clearGrowthOf({ chatId: args?.chatId }));
     if (name === 'persona_scope_import') return ok(await ops.importFromPlugin({ replace: args?.replace === true }));
     if (name === 'persona_scope_export') return ok(await ops.exportToPlugin());

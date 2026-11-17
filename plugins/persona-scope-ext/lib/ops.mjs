@@ -26,6 +26,7 @@ import { join } from 'node:path';
 import { loadState, mutate, stateFile } from './state.mjs';
 import { readPluginState, writePluginState, mergeItems } from './interop.mjs';
 import { growthSnapshot, growthConflicts, growthBlockOf, clearGrowth } from './growth.mjs';
+import { buildVars, renderPersonaText } from './template.mjs';
 
 const OPENID_RE = /^[0-9A-Fa-f]{32}$/;
 const BAD_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -245,6 +246,62 @@ export async function exportToPlugin() {
   };
 }
 
+/**
+ * 扫一遍宿主人格库里带 `{{…}}` 的人格。
+ *
+ * 这类人格会让 DSH 的提示词渲染失败 **整轮没有回复**，而且没有任何报错——
+ * 用户只看到「不说话了」。所以状态页要主动报出来，并提供一键修复。
+ */
+export async function scanBrokenPersonas() {
+  const st = await statusOf({});
+  const broken = [];
+  for (const p of st.personas || []) {
+    try {
+      const d = await get(`/personas/read?id=${encodeURIComponent(p.id)}`);
+      if (/\{\{/.test(String(d.raw || ''))) broken.push({ id: p.id, label: p.label || p.id });
+    } catch { /* 单个读不出来不影响整体 */ }
+  }
+  return { ok: true, total: (st.personas || []).length, broken };
+}
+
+/**
+ * 修复：把带占位符的人格渲染成纯文本写回去。
+ *
+ * 渲染规则与建卡时一致（`{{user}}` 在这里固定成「你」——人格是给模型看的第二人称，
+ * 且这份人格可能被整个群共用，不能绑死在某一个 openid 上）。
+ * 写前由宿主自己留备份（`personas/.backup`）。
+ */
+export async function repairPersonas({ dryRun = false, userId = '' } = {}) {
+  const { broken } = await scanBrokenPersonas();
+  if (!broken.length) return { ok: true, fixed: 0, items: [], note: '没有发现带占位符的人格' };
+
+  const items = [];
+  for (const p of broken) {
+    try {
+      const d = await get(`/personas/read?id=${encodeURIComponent(p.id)}`);
+      const rendered = renderPersonaText(String(d.raw || ''), buildVars({
+        user: '你',
+        char: p.label || p.id,
+        userId,
+      }));
+      if (!dryRun) {
+        await post('/personas/save', { id: p.id, raw: rendered.text });
+      }
+      items.push({ id: p.id, label: p.label, before: String(d.raw || '').length, after: rendered.text.length, unknown: rendered.unknown });
+    } catch (e) {
+      items.push({ id: p.id, label: p.label, error: String(e?.message ?? e) });
+    }
+  }
+  const fixed = items.filter((x) => !x.error).length;
+  return {
+    ok: true,
+    fixed,
+    dryRun,
+    items,
+    note: dryRun ? `将修复 ${fixed} 份人格（未写入）` : `已修复 ${fixed} 份人格`,
+  };
+}
+
 /** 清除某个群的成长（改写 persona-grow 的状态文件，带备份） */
 export function clearGrowthOf({ chatId } = {}) {
   return clearGrowth(chatId);
@@ -320,21 +377,38 @@ export async function removePreset({ id } = {}) {
  *
  * 顺序：卡片在前、预设在后。预设是「约束/风格」，压在卡片后面更贴合当轮。
  */
-export function composeRaw({ card, presets = [] } = {}) {
+export function composeRaw({ card, presets = [], vars = {}, openid = '' } = {}) {
   const head = String(card?.text ?? '').trim();
   const tail = presets
     .filter((p) => p && p.enabled !== false && String(p.text ?? '').trim())
     .map((p) => String(p.text).trim())
     .join('\n\n');
-  return [head, tail].filter(Boolean).join('\n\n');
+  const raw = [head, tail].filter(Boolean).join('\n\n');
+
+  /**
+   * 占位符必须在这里就渲染掉：人格正文会进 DSH 的系统提示，
+   * 而那边解析到没注册的 `{{user}}` 会让**整段渲染失败**（就是用户报的错）。
+   */
+  const rendered = renderPersonaText(raw, buildVars({
+    user: String(vars.user || (openid ? `对方` : '对方')),
+    char: card?.name || '',
+    userId: openid,
+  }));
+  return { text: rendered.text, unknown: rendered.unknown, conditions: rendered.conditions };
 }
 
 /** 预览：不发写请求，让用户看清楚会生成什么 */
-export function previewOf({ cardId, growthChatId = '' } = {}) {
+export function previewOf({ cardId, growthChatId = '', openid = '', userLabel = '' } = {}) {
   const st = loadState();
   const card = pick(st, 'cards', String(cardId ?? '').trim());
   if (!card) throw new Error('没找到这张人设卡');
-  let raw = composeRaw({ card, presets: st.presets });
+  const composed = composeRaw({
+    card,
+    presets: st.presets,
+    vars: { user: String(userLabel || '').trim() },
+    openid: String(openid || '').trim(),
+  });
+  let raw = composed.text;
 
   /**
    * 与人设成长的兼容：把**指定那个群**的成长条目叠在预设后面。
@@ -376,6 +450,9 @@ export function previewOf({ cardId, growthChatId = '' } = {}) {
     chars: raw.length,
     raw,
     usedPresets: st.presets.filter((p) => p.enabled !== false && p.text.trim()).map((p) => p.name),
+    unknownVars: composed.unknown,
+    strippedConditions: composed.conditions,
+    userName: String(userLabel || '').trim() || '对方',
     growthEntries: growth.entries,
     growthChatId: growth.chatId,
     growthNote: growth.reason || '',
@@ -392,7 +469,7 @@ export function previewOf({ cardId, growthChatId = '' } = {}) {
  * @param {string} [p.openid] 顺带绑给谁（留空只写人格、不绑）
  * @param {string} [p.personaId] 自定义人格 id（默认 scope-<卡片id>）
  */
-export async function applyCard({ cardId = '', openid = '', personaId = '', growthChatId = '' } = {}) {
+export async function applyCard({ cardId = '', openid = '', personaId = '', growthChatId = '', userLabel = '' } = {}) {
   /**
    * **先把所有本地输入校验完，再发第一个写请求。**
    *
@@ -400,7 +477,7 @@ export async function applyCard({ cardId = '', openid = '', personaId = '', grow
    * 函数确实报错了，但原先绑定者正在用的那份人格正文已经被覆盖掉了 ——
    * 用户看到的是「报错」，实际已经改了别人的设定。
    */
-  const pv = previewOf({ cardId, growthChatId });
+  const pv = previewOf({ cardId, growthChatId, openid, userLabel });
   /**
    * 卡片要求叠加成长，但群没定下来（多个群在长）→ **拒绝执行**。
    * 以前只把警告放在预览字段里，应用仍会静默生成一份不含成长的人格并绑上去，

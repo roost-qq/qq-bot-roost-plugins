@@ -32,6 +32,12 @@
 </head>
 <body>
 
+<div id="brokenWarn" class="note" style="display:none;border-left-color:#d55;margin:0 0 14px">
+  <b>⚠ 有人格带 <code>{{占位符}}</code>，它会让整轮对话<strong>没有任何回复</strong></b>
+  <p style="margin:6px 0 0" id="brokenList"></p>
+  <div class="row"><button id="btnRepair" class="danger">一键修复（渲染成纯文本）</button></div>
+</div>
+
 <p class="muted">
   绑上之后，这个人在<strong>任何群</strong>都用他那一套人格，别人不受影响。<br>
   走宿主的「按人指定人格」（<code>persona.bySender</code>），在<strong>系统提示层</strong>生效。
@@ -72,6 +78,10 @@
   <input type="text" id="openid" placeholder="那个人的 openid（32 位十六进制），留空只生成人格不绑人">
   <button id="btnApply">生成并绑定</button>
   <button id="btnUnbind">解除绑定</button>
+</div>
+<div class="row">
+  <label class="muted" for="userLabel">对方称呼（卡片里的 {{user}}）：</label>
+  <input type="text" id="userLabel" placeholder="默认「对方」；填了就用人设卡里的那个名字" style="max-width:320px">
 </div>
 <div class="row">
   <label class="muted" for="growthChat">叠加成长（可选）：</label>
@@ -244,6 +254,16 @@ function renderGrowthChats(g) {
   if (keep) sel.value = keep;
 }
 
+function renderBroken(list) {
+  const box = $('brokenWarn');
+  if (!box) return;
+  const rows = Array.isArray(list) ? list : [];
+  if (!rows.length) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  $('brokenList').textContent = rows.map((x) => x.label || x.id).join('、')
+    + '（' + rows.length + ' 份）—— 修复前模型每轮都会失败。';
+}
+
 function renderGrowth(g) {
   const box = $('growth');
   if (!g || g.installed === false) { box.textContent = '人设成长扩展：未安装或还没长过，无需处理。'; return; }
@@ -279,6 +299,7 @@ async function refresh() {
     const d = await act('status', {});
     state = { cards: d.cards || [], presets: d.presets || [], personas: d.personas || [], bySender: d.bySender || {} };
     renderCards(); renderPresets(); renderBindings();
+    renderBroken(d.brokenPersonas);
     renderGrowth(d.growth);
     renderGrowthChats(d.growth);
     renderInterop(d.interop);
@@ -323,11 +344,18 @@ $('btnCardDel').onclick = async () => {
 $('btnPreview').onclick = async () => {
   const c = curCard(); if (!c) return show('先选一张人设卡', 'error');
   try {
-    const d = await act('preview', { cardId: c.id, growthChatId: $('growthChat').value || '' });
+    const d = await act('preview', {
+      cardId: c.id,
+      growthChatId: $('growthChat').value || '',
+      openid: $('openid').value.trim(),
+      userLabel: ($('userLabel')?.value || '').trim(),
+    });
     $('preview').hidden = false;
     $('preview').textContent = d.raw || '（空）';
     show('拼装结果：' + d.chars + ' 字，用到预设：' + ((d.usedPresets || []).join('、') || '无')
-      + (d.growthEntries ? '，叠加成长 ' + d.growthEntries + ' 条' : ''), 'ok');
+      + (d.growthEntries ? '，叠加成长 ' + d.growthEntries + ' 条' : '')
+      + (d.strippedConditions ? '；' + d.strippedConditions + ' 处 {{if}} 取了 else 分支' : '')
+      + (d.unknownVars && d.unknownVars.length ? '；⚠ 未知占位符已移除：' + d.unknownVars.join('、') : ''), 'ok');
   } catch (e) { show(String(e.message || e), 'error'); }
 };
 
@@ -362,7 +390,12 @@ $('btnApply').onclick = async () => {
   const c = curCard(); if (!c) return show('先选一张人设卡', 'error');
   try {
     show('生成中…');
-    const d = await act('apply', { cardId: c.id, openid: $('openid').value.trim(), growthChatId: $('growthChat').value || '' });
+    const d = await act('apply', {
+      cardId: c.id,
+      openid: $('openid').value.trim(),
+      growthChatId: $('growthChat').value || '',
+      userLabel: ($('userLabel')?.value || '').trim(),
+    });
     show(d.message || '完成', 'ok');
     await refresh();
   } catch (e) { show(String(e.message || e), 'error'); }
@@ -371,6 +404,16 @@ $('btnUnbind').onclick = async () => {
   const v = $('openid').value.trim();
   if (!v) return show('要填那个人的 openid', 'error');
   try { const d = await act('unbind', { openid: v }); show(d.message || '已解绑', 'ok'); await refresh(); } catch (e) { show(String(e.message || e), 'error'); }
+};
+
+$('btnRepair').onclick = async () => {
+  if (!confirm('把这些人格里的 {{占位符}} 渲染成纯文本？宿主会自动留备份。')) return;
+  try {
+    show('修复中…');
+    const d = await act('repairPersonas', {});
+    show(d.message || '已修复', 'ok');
+    await refresh();
+  } catch (e) { show(String(e.message || e), 'error'); }
 };
 
 $('btnClearGrowth').onclick = async () => {

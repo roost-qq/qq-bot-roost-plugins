@@ -64,7 +64,10 @@ export function createActions({ env = {}, log = () => {} } = {}) {
       } catch (e) { growth = { installed: false, chats: [], error: String(e?.message ?? e) }; }
       let interop = { ok: false };
       try { interop = ops.interopStatus(); } catch (e) { interop = { ok: false, reason: String(e?.message ?? e) }; }
-      return { ok: true, ...local, ...host, api: 'ok', growth, interop };
+      /** 带 {{…}} 的人格会让整轮没有回复，必须主动报出来 */
+      let broken = { ok: true, total: 0, broken: [] };
+      try { broken = await ops.scanBrokenPersonas(); } catch { /* 读不到就跳过 */ }
+      return { ok: true, ...local, ...host, api: 'ok', growth, interop, brokenPersonas: broken.broken };
     }),
 
     saveCard: wrap(async (p) => { setApiEnv(env); return ops.saveCard(p); }),
@@ -75,12 +78,14 @@ export function createActions({ env = {}, log = () => {} } = {}) {
     removePreset: wrap(async (p) => { setApiEnv(env); return ops.removePreset(p); }),
 
     /** 预览：只拼装、不写宿主 */
-    preview: wrap(async (p) => { setApiEnv(env); return ops.previewOf({ cardId: p.cardId, growthChatId: p.growthChatId || '' }); }),
+    preview: wrap(async (p) => { setApiEnv(env); return ops.previewOf({ cardId: p.cardId, growthChatId: p.growthChatId || '', openid: p.openid || '', userLabel: p.userLabel || '' }); }),
 
-    apply: wrap(async (p) => { setApiEnv(env); return ops.applyCard({ cardId: p.cardId, openid: p.openid, growthChatId: p.growthChatId || '' }); }),
+    apply: wrap(async (p) => { setApiEnv(env); return ops.applyCard({ cardId: p.cardId, openid: p.openid, growthChatId: p.growthChatId || '', userLabel: p.userLabel || '' }); }),
     bind: wrap(async (p) => { setApiEnv(env); return ops.bind({ openid: p.openid, persona: p.persona }); }),
     unbind: wrap(async (p) => { setApiEnv(env); return ops.unbind({ openid: p.openid }); }),
     read: wrap(async (p) => { setApiEnv(env); return ops.readPersona({ id: p.id }); }),
+
+    repairPersonas: wrap(async (p) => { setApiEnv(env); return ops.repairPersonas({ dryRun: p.dryRun === true }); }),
 
     /** 与 Roost 插件互通：导入 / 导出卡片与预设 */
     importPlugin: wrap(async (p) => { setApiEnv(env); return ops.importFromPlugin({ replace: p.replace === true }); }),

@@ -5,7 +5,7 @@
   "serverName": "persona-scope-ext",
   "name": "专属人设",
   "description": "给某个人绑定专属人设卡；可叠加该群的人设成长条目，与 Roost 插件互通",
-  "version": "0.6.2",
+  "version": "0.7.1",
   "transport": "stdio",
   "command": "node",
   "args": [
@@ -89,6 +89,11 @@
       {
         "id": "enableInjection",
         "label": "开启每轮注入（走插件）",
+        "confirm": true
+      },
+      {
+        "id": "repairPersonas",
+        "label": "修复带占位符的人格",
         "confirm": true
       }
     ]
