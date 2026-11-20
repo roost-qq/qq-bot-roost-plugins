@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "repo": "tdcq9594/qq-bot-roost-plugins",
+  "repo": "roost-qq/qq-bot-roost-plugins",
   "branch": "main",
   "updated": "2026-11-20",
   "plugins": [
@@ -17,7 +17,7 @@
       "frameworkVersion": ">=0.9.12",
       "runtime": "node",
       "path": "plugins/ai-chat",
-      "sha256": "d9181ac77b8d6775aa15d5987257156f7e444d408c519d17372713364000570e",
+      "sha256": "2ae983cc7f35799f0d4254f10befadc0703dd8f0d4cf3a959f0695794cbb965d",
       "author": "tdcq9594",
       "addedAt": "2026-10-24",
       "verified": "official",
@@ -147,7 +147,7 @@
       ],
       "runtime": "node",
       "path": "plugins/demo-x",
-      "sha256": "8a85a2b73e06f3bd842bd2a120027263cc6c889ad8be645098f0f338aa71c95f",
+      "sha256": "17002d255d0c5c84ac31366a41ecb5dba1f41bfa9ee8e91e625019d6f310f007",
       "author": "tdcq9594",
       "commands": [
         "demo"
