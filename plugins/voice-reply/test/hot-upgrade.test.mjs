@@ -1,0 +1,37 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, copyFileSync, writeFileSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { randomUUID } from 'node:crypto';
+import { MANIFEST, ROOT, normalizeConfig } from '../lib/config.mjs';
+import { PROFILE_FIELDS } from '../lib/profiles.mjs';
+import { temporary } from './helpers.mjs';
+
+test('同进程热升级：旧配置模块留在缓存时，新14字段方案仍正确读取且不修改原文', async t => {
+  const base = temporary(t), root = join(base, 'extension'), lib = join(root, 'lib'), dir = join(base, 'data');
+  mkdirSync(lib, { recursive: true }); mkdirSync(dir);
+  copyFileSync(join(ROOT, 'lib/config.mjs'), join(lib, 'config.mjs'));
+  copyFileSync(join(ROOT, 'lib/profiles.mjs'), join(lib, 'profiles.mjs'));
+  const oldManifest = structuredClone(MANIFEST); oldManifest.version = '1.1.3';
+  for (const key of ['textSplitMethod', 'fragmentInterval', 'topK', 'topP', 'temperature', 'freeze', 'serviceDir']) delete oldManifest.config[key];
+  writeFileSync(join(root, 'plugin.json'), JSON.stringify(oldManifest));
+  const old = await import(pathToFileURL(join(lib, 'config.mjs')).href);
+  assert.equal(old.MANIFEST.version, '1.1.3');
+  const nextManifest = structuredClone(MANIFEST); nextManifest.version = '1.1.5';
+  writeFileSync(join(root, 'plugin.json'), JSON.stringify(nextManifest));
+  const config = normalizeConfig({ api: 'http://127.0.0.1:9880', refAudio: 'reference.wav', promptText: 'reference', promptLang: 'ja', textLang: 'ja', sovitsWeights: 'voice.pth', gptWeights: 'voice.ckpt', topK: 15 });
+  assert.equal(old.normalizeConfig(config).topK, undefined, 'The old dependency really is cached');
+  writeFileSync(join(root, 'config.json'), JSON.stringify(config));
+  const id = randomUUID(), values = Object.fromEntries(PROFILE_FIELDS.map(key => [key, config[key]]));
+  const raw = JSON.stringify({ items: [{ id, name: 'existing voice', values, updatedAt: new Date().toISOString() }], activeId: id });
+  writeFileSync(join(dir, 'profiles.json'), raw);
+  const next = await import(pathToFileURL(join(lib, 'profiles.mjs')).href + '?v=1.1.5');
+  const profiles = next.createProfiles({ root, dir });
+  const result = profiles.list();
+  assert.equal(result.items.length, 1); assert.equal(result.items[0].id, id); assert.equal(result.items[0].values.topK, 15); assert.equal(result.activeId, id);
+  assert.equal(readFileSync(join(dir, 'profiles.json'), 'utf8'), raw);
+  const saved = profiles.save({ id, name: 'renamed voice', values });
+  assert.equal(saved.items.length, 1); assert.equal(saved.items[0].id, id); assert.equal(saved.activeId, id);
+  assert.equal(old.MANIFEST.version, '1.1.3', 'Fix does not rely on clearing all process caches');
+});

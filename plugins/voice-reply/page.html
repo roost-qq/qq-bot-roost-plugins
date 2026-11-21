@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>语音回复</title>
+<style>
+:root{font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:light dark;--ink:#24262c;--surface:#fff;--edge:#d6dae2;--muted:#626976;--accent:#365bcc;--error:#b52d39;--success:#187747;color:var(--dsw-alias-label-primary,var(--ink));background:transparent}
+@media(prefers-color-scheme:dark){:root{--ink:#e8eaf0;--surface:#252830;--edge:#484e5a;--muted:#adb5c4;--accent:#a7baff;--error:#ff9caa;--success:#8ed8b1}}
+*{box-sizing:border-box}body{margin:0;padding:20px;max-width:1020px;background:transparent}h1{font-size:22px;line-height:1.3;margin:0 0 8px}h2{font-size:16px;margin:0 0 12px}p{margin:6px 0}.muted,.hint{color:var(--dsw-alias-label-secondary,var(--muted))}.eyebrow{font-size:12px;margin-bottom:6px}.panel{border:1px solid var(--edge);border-radius:10px;padding:16px;margin-top:18px}.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 20px}.field{min-width:0}.wide{grid-column:1/-1}label{display:block;font-weight:500;margin-bottom:5px}.hint{font-size:12px;margin:5px 0 0}.check{display:flex;align-items:center;gap:8px;font-weight:400;margin:6px 0}input,textarea,select,button{font:inherit;color:inherit}input:not([type=checkbox]),select,textarea{width:100%;border:1px solid var(--edge);border-radius:6px;padding:8px 10px;background:var(--dsw-alias-background-secondary,var(--surface))}input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}textarea{resize:vertical;min-height:88px}button{border:1px solid var(--edge);border-radius:6px;padding:7px 13px;background:var(--dsw-alias-background-secondary,var(--surface));cursor:pointer}button.primary{color:var(--accent);border-color:var(--accent)}button:disabled{opacity:.5;cursor:default}:focus-visible{outline:2px solid var(--accent);outline-offset:2px}fieldset{padding:0;border:0;margin:0;min-width:0}fieldset:disabled{opacity:.65}.message{min-height:23px;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:10px}.error{color:var(--error)}.success{color:var(--success)}dl{display:grid;grid-template-columns:96px minmax(0,1fr);gap:5px 12px;margin:12px 0 0}dt{color:var(--dsw-alias-label-secondary,var(--muted))}dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}audio{display:block;width:100%;margin-top:12px}code{font:12px ui-monospace,monospace}#configFields{margin-bottom:16px}#previewMeta{white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:640px){body{padding:14px}.panel{padding:13px}.grid{grid-template-columns:1fr}.wide{grid-column:auto}dl{grid-template-columns:76px minmax(0,1fr)}}
+dialog{max-width:min(520px,calc(100% - 32px));border:1px solid var(--edge);border-radius:10px;padding:22px;background:var(--dsw-alias-background-secondary,var(--surface));color:inherit}dialog::backdrop{background:#0008}
+</style>
+</head>
+<body>
+<header>
+<p class="eyebrow muted">表达 · 语音回复</p>
+<h1>语音回复</h1>
+<p>准备好 GPT-SoVITS 安装目录、角色模型、参考音频及其原文，保存全局设置后即可一键启动服务。</p>
+</header>
+<section class="panel" aria-labelledby="statusTitle">
+<h2 id="statusTitle">运行状态</h2>
+<div id="serviceState" class="message" role="status" aria-live="polite">正在读取 GPT-SoVITS 服务状态…</div>
+<p id="serviceDirectory" class="hint">一键启动使用已保存的安装目录；请先在扩展设置中保存安装目录。</p>
+<div class="row" style="margin-top:10px"><button id="startService" class="primary" type="button" disabled>一键启动服务</button><button id="refreshStatus" type="button">刷新状态</button><button id="probe" type="button">检查 GPT-SoVITS 服务</button></div>
+<p id="freezeSupport" class="hint">语义复用由本扩展启动器提供；服务检查后显示支持情况。</p>
+<details id="serviceLogs" hidden><summary>服务启动日志</summary><pre id="serviceLogTail" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
+<div id="statusMessage" class="message" role="status" aria-live="polite">正在读取状态…</div>
+<dl id="statusDetails" hidden></dl>
+<div id="probeMessage" class="message" role="status" aria-live="polite"></div>
+</section>
+<section class="panel" aria-labelledby="profilesTitle">
+<h2 id="profilesTitle">音色方案</h2>
+<p class="hint">首次配置：填写方案名和下方音色参数 → 保存方案 → 应用方案。选择已有方案后点击「应用方案」才会启用；全局设置与密钥独立保存。</p>
+<fieldset id="profilesFieldset" disabled>
+<div class="grid" style="margin-top:12px">
+<div class="field"><label for="profileSelect">已有方案</label><select id="profileSelect"><option value="">新建方案</option></select></div>
+<div class="field"><label for="profileName">方案名</label><input id="profileName" type="text" maxlength="40" placeholder="例如：日语角色 · 轻声"></div>
+</div>
+<p id="profileActive" class="hint">正在读取音色方案…</p>
+<div class="row" style="margin-top:12px"><button id="saveProfile" class="primary" type="button">保存方案</button><button id="revertProfile" type="button" disabled>还原修改</button><button id="newProfile" type="button">新建方案</button><button id="applyProfile" type="button">应用方案</button><button id="removeProfile" type="button">删除方案</button></div>
+</fieldset>
+<div class="row" style="margin-top:10px"><button id="reloadProfiles" type="button">刷新方案列表</button></div>
+<p id="profileDirty" class="message error" role="status" aria-live="polite" hidden>方案有未保存修改，请保存方案</p>
+<div id="profilesMessage" class="message" role="status" aria-live="polite"></div>
+<dialog id="draftDialog" aria-labelledby="draftTitle" aria-describedby="draftDescription">
+<h2 id="draftTitle">方案有未保存修改</h2>
+<p id="draftDescription">继续操作前，请保存方案或放弃修改；取消会保留当前草稿。</p>
+<div class="row" style="margin-top:16px"><button id="draftSave" class="primary" type="button">保存并继续</button><button id="draftDiscard" type="button">放弃修改</button><button id="draftCancel" type="button">取消</button></div>
+</dialog>
+</section>
+<section class="panel" aria-labelledby="configTitle">
+<h2 id="configTitle">音色参数与全局设置</h2>
+<p class="hint">设置项来自已安装扩展的清单。密钥只显示是否已设置；留空保留现有密钥，勾选清除后保存才会删除。</p>
+<form id="configForm" autocomplete="off" novalidate>
+<fieldset id="configFieldset" disabled><div id="configFields" class="grid"></div><button id="save" class="primary" type="submit">保存全局设置</button><p class="hint">此按钮独立保存全局设置与密钥；音色参数请保存为方案，再点击「应用方案」。</p></fieldset>
+</form>
+<div class="row" style="margin-top:10px"><button id="reloadConfig" type="button">重新读取配置</button></div>
+<div id="configMessage" class="message" role="status" aria-live="polite">正在读取配置…</div>
+</section>
+<section class="panel" aria-labelledby="previewTitle">
+<h2 id="previewTitle">本地试听</h2>
+<p class="muted">先保存并应用音色方案，再生成试听。试听仅在本页播放，不发送 QQ；生成成功不等于 QQ 送达。</p>
+<label for="previewText" style="margin-top:12px">试听文本</label>
+<textarea id="previewText" rows="3" maxlength="300" placeholder="输入一句要念的内容；留空由台词库抽取。"></textarea>
+<div class="row" style="margin-top:10px"><button id="preview" class="primary" type="button">生成试听</button><button id="stopPreview" type="button" disabled>停止等待 / 播放</button></div>
+<div id="previewMessage" class="message" role="status" aria-live="polite"></div>
+<p id="previewMeta" class="hint"></p>
+<audio id="audio" controls preload="none" hidden></audio>
+<p class="hint">每秒检查一次进度，最多等待 150 秒。停止等待或切离页面会清理轮询与音频，后台合成可能继续。</p>
+</section>
+<script>
+'use strict';
+(() => {
+  const ID = 'voice-reply';
+  const $ = id => document.getElementById(id);
+  const own = (o, key) => Object.prototype.hasOwnProperty.call(o, key);
+  const plain = o => o !== null && typeof o === 'object' && !Array.isArray(o);
+  const controls = new Map();
+  const PROFILE_FIELDS = ['api', 'sovitsWeights', 'gptWeights', 'refAudio', 'promptText', 'promptLang', 'textLang', 'speed', 'textSplitMethod', 'fragmentInterval', 'topK', 'topP', 'temperature', 'freeze'];
+  const RANGE_FIELDS = {
+    speed: { min: 0.5, max: 2, step: 0.05 },
+    fragmentInterval: { min: 0.01, max: 1, step: 0.01 },
+    topK: { min: 1, max: 100, step: 1, integer: true },
+    topP: { min: 0, max: 1, step: 0.05 },
+    temperature: { min: 0.01, max: 2, step: 0.05 }
+  };
+  const OPTION_LABELS = {
+    textSplitMethod: { cut0: '不切', cut1: '四句', cut2: '50字', cut3: '中文句号', cut4: '英文句号', cut5: '标点' },
+    textLang: { ja: '日语', zh: '中文', en: '英语', auto: '自动识别' },
+    promptLang: { ja: '日语', zh: '中文', en: '英语', auto: '自动识别' }
+  };
+  const FREEZE_LABEL = '复用上次语义结果（调速/换音色，避免重新采样）';
+  let profileItems = [];
+  let profilesReady = false;
+  let profilesBusy = false;
+  let selectedProfileId = '';
+  let profileBaseline = null;
+  let assigningProfile = false;
+  let draftResolve = null;
+  const requests = new Set();
+  let configReady = false;
+  let canEdit = false;
+  let previewBusy = false;
+  let active = !document.hidden;
+  let previewGeneration = 0;
+  let previewDeadline = 0;
+  let previewTimer = null;
+  let pollTimer = null;
+  let pollWake = null;
+  let previewAbort = null;
+  let savedServiceDir = '';
+  let semanticFreeze;
+  let servicePhase = 'stopped';
+  let serviceBusy = false;
+  let serviceCanStop = false;
+  let serviceGeneration = 0;
+  let serviceTimer = null;
+  let serviceTimeout = null;
+  let serviceWake = null;
+  let serviceAbort = null;
+
+  function message(id, text, kind = '') {
+    $(id).textContent = text;
+    $(id).className = 'message' + (kind ? ' ' + kind : '');
+  }
+  function scrub(value) {
+    let text = typeof value === 'string' ? value : '请求未成功，请检查服务状态后重试。';
+    for (const { field, input } of controls.values()) {
+      if (field.secret && input.value) text = text.split(input.value).join('[密钥已隐藏]');
+    }
+    return text.replace(/(Bearer\s+)\S+/gi, '$1[已隐藏]')
+      .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, '$1[已隐藏]@')
+      .replace(/([?&](?:key|api_key|token|access_token)=)[^&\s]*/gi, '$1[已隐藏]').slice(0, 1500);
+  }
+  async function api(op, arg, signal) {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    if (signal?.aborted) abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    requests.add(controller);
+    const timeout = setTimeout(abort, 20000);
+    try {
+      const response = await fetch('/roost/api/quick', {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ op, arg }), signal: controller.signal
+      });
+      const out = await response.json().catch(() => null);
+      if (!response.ok || !plain(out) || out.ok !== true) {
+        throw new Error(scrub(out?.message || out?.error || `请求失败（HTTP ${response.status}），请检查 Roost 面板连接。`));
+      }
+      return out;
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error(signal?.aborted ? '操作已停止。' : '请求超时或页面已切离，请重试。');
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      requests.delete(controller);
+      signal?.removeEventListener('abort', abort);
+    }
+  }
+  async function action(actionName, payload = {}, signal) {
+    const out = await api('extensions.ui.action', { id: ID, action: actionName, payload }, signal);
+    if (!plain(out.data)) throw new Error('动作返回的数据格式异常，请检查扩展版本。');
+    return out.data;
+  }
+  function line(label, value) {
+    const term = document.createElement('dt');
+    const detail = document.createElement('dd');
+    term.textContent = label;
+    detail.textContent = scrub(String(value ?? '—'));
+    $('statusDetails').append(term, detail);
+  }
+  function updateServiceControls() {
+    const edited = controls.get('serviceDir')?.input.value.trim();
+    $('serviceDirectory').textContent = savedServiceDir
+      ? '一键启动使用已保存的安装目录：' + savedServiceDir + (edited !== undefined && edited !== savedServiceDir ? '。目录编辑尚未保存，请先点击「保存全局设置」。' : '。修改目录后请先保存全局设置。')
+      : '请先在扩展设置中填写并保存安装目录，再点击「一键启动服务」。';
+    const live = ['running', 'starting'].includes(servicePhase) || serviceCanStop;
+    $('startService').textContent = servicePhase === 'stopping' ? '正在关闭…' : live && serviceCanStop ? '关闭服务' : servicePhase === 'starting' ? '正在启动…' : live ? '外部启动的服务' : '一键启动服务';
+    $('startService').disabled = !active || !configReady || !canEdit || servicePhase === 'stopping' || (live ? !serviceCanStop : serviceBusy || !savedServiceDir);
+    if (servicePhase === 'running' && !serviceCanStop) $('serviceDirectory').textContent += ' 当前服务由外部启动，请在原启动位置管理。';
+  }
+  function updateFreezeSupport(features) {
+    if (plain(features) && typeof features.semanticFreeze === 'boolean') semanticFreeze = features.semanticFreeze;
+    const control = controls.get('freeze');
+    if (control) control.input.disabled = semanticFreeze === false;
+    $('freezeSupport').textContent = semanticFreeze === false
+      ? '当前服务不支持语义复用：普通 api_v2.py 未提供此功能。请使用本扩展的一键启动器；复用开关已暂停编辑，已保存的值仍会保留。'
+      : semanticFreeze === true ? '当前服务支持语义复用；开启后可调速或换音色并复用上次语义结果。' : '语义复用由本扩展启动器提供；普通 api_v2.py 未提供此功能，请检查服务支持情况。';
+  }
+  function renderService(data) {
+    if (!['stopped', 'starting', 'running', 'stopping', 'error'].includes(data.phase)) throw new Error('服务状态返回的数据格式异常。');
+    servicePhase = data.phase;
+    serviceCanStop = data.canStop === true;
+    updateFreezeSupport(data.features);
+    const labels = { stopped: '已停止', starting: '启动中', running: '运行中', stopping: '正在关闭', error: '服务异常' };
+    message('serviceState', ['GPT-SoVITS：' + labels[data.phase], data.api, data.pid ? 'PID ' + data.pid : '', data.message].filter(Boolean).map(v => scrub(String(v))).join(' · '), data.phase === 'error' ? 'error' : data.phase === 'running' ? 'success' : '');
+    const logs = Array.isArray(data.logTail) ? data.logTail.filter(v => typeof v === 'string').map(scrub) : [];
+    $('serviceLogTail').textContent = logs.join('\n');
+    $('serviceLogs').hidden = !logs.length;
+    updateServiceControls();
+  }
+  function stopServicePolling() {
+    serviceGeneration++;
+    serviceAbort?.abort(); serviceAbort = null;
+    clearTimeout(serviceTimer); clearTimeout(serviceTimeout);
+    serviceTimer = serviceTimeout = null;
+    if (serviceWake) { const wake = serviceWake; serviceWake = null; wake(); }
+    serviceBusy = false;
+    updateServiceControls();
+  }
+  function waitServicePoll() {
+    return new Promise(resolve => {
+      serviceWake = resolve;
+      serviceTimer = setTimeout(() => { serviceWake = null; serviceTimer = null; resolve(); }, 2000);
+    });
+  }
+  async function runService(op = 'status') {
+    if (typeof op === 'boolean') op = op ? 'start' : 'status';
+    if (!active || (serviceBusy && op !== 'stop') || (op === 'start' && (!configReady || !canEdit || !savedServiceDir)) || (op === 'stop' && !serviceCanStop)) return;
+    stopServicePolling();
+    const generation = serviceGeneration;
+    serviceBusy = true;
+    serviceAbort = new AbortController();
+    const signal = serviceAbort.signal;
+    const current = () => active && generation === serviceGeneration;
+    const deadline = Date.now() + 180000;
+    let timedOut = false;
+    serviceTimeout = setTimeout(() => { timedOut = true; serviceAbort?.abort(); if (serviceWake) { const wake = serviceWake; serviceWake = null; wake(); } }, 180000);
+    updateServiceControls();
+    if (op === 'start') message('serviceState', '正在使用已保存的安装目录提交启动任务…');
+    if (op === 'stop') { servicePhase = 'stopping'; updateServiceControls(); message('serviceState', '正在关闭服务…'); }
+    try {
+      let data = await action('service', { op }, signal);
+      if (!current()) return;
+      renderService(data);
+      while (current() && !signal.aborted && Date.now() < deadline && ['starting', 'stopping'].includes(data.phase)) {
+        await waitServicePoll();
+        if (!current()) return;
+        if (signal.aborted) break;
+        data = await action('service', { op: 'status' }, signal);
+        if (!current()) return;
+        renderService(data);
+      }
+      if (current() && (timedOut || Date.now() >= deadline)) throw new Error('服务操作等待已达 180 秒，已停止轮询；请刷新状态查看后台进展。');
+    } catch (error) {
+      if (current()) {
+        servicePhase = 'error';
+        message('serviceState', timedOut ? '服务操作等待已达 180 秒，已停止轮询；请刷新状态查看后台进展。' : scrub(error.message) + ' 可刷新状态后重试。', 'error');
+      }
+    } finally {
+      if (generation === serviceGeneration) {
+        clearTimeout(serviceTimer); clearTimeout(serviceTimeout);
+        serviceTimer = serviceTimeout = null;
+        serviceAbort = null; serviceBusy = false; updateServiceControls();
+      }
+    }
+  }
+  async function refreshStatus() {
+    $('refreshStatus').disabled = true;
+    message('statusMessage', '正在读取状态…');
+    $('statusDetails').hidden = true;
+    try {
+      const data = await action('status');
+      if (!active) return;
+      if (!Array.isArray(data.missing) || typeof data.enabled !== 'boolean') throw new Error('状态返回的数据格式异常。');
+      $('statusDetails').replaceChildren();
+      line('扩展版本', data.version);
+      line('语音工具', data.enabled ? '已启用' : '已停用');
+      line('准备情况', data.missing.length ? data.missing.join('、') : '必需设置已齐全');
+      line('台词数量', data.lineCount);
+      line('数据目录', data.dataDir);
+      if (plain(data.lastJob)) {
+        const last = data.lastJob;
+        line('最近任务', [last.id, last.status, last.error].filter(v => typeof v === 'string').join(' · ') || '暂无详情');
+      }
+      $('statusDetails').hidden = false;
+      message('statusMessage', '状态已更新。服务连接请使用「检查 GPT-SoVITS 服务」。');
+    } catch (error) { if (active) message('statusMessage', scrub(error.message), 'error'); }
+    finally { $('refreshStatus').disabled = false; }
+  }
+  async function probe() {
+    $('probe').disabled = true;
+    message('probeMessage', '正在检查 GPT-SoVITS 服务…');
+    try {
+      const data = await action('probe');
+      if (!active) return;
+      if (typeof data.ok !== 'boolean') throw new Error('服务检查返回的数据格式异常。');
+      updateFreezeSupport(data.features);
+      const endpoints = Array.isArray(data.endpoints) ? data.endpoints.filter(v => typeof v === 'string') : [];
+      message('probeMessage', [data.ok ? '服务检查通过。' : '服务检查未通过。', scrub(data.message || ''), ...endpoints.map(scrub)].filter(Boolean).join('\n'), data.ok ? 'success' : 'error');
+    } catch (error) { if (active) message('probeMessage', scrub(error.message), 'error'); }
+    finally { $('probe').disabled = false; }
+  }
+  function fieldControl(field, value, secretSet) {
+    field = { ...field, ...(RANGE_FIELDS[field.key] || {}) };
+    const wrapper = document.createElement('div');
+    wrapper.className = 'field';
+    const label = document.createElement('label');
+    const id = 'setting-' + controls.size;
+    label.htmlFor = id;
+    label.textContent = field.key === 'freeze' ? FREEZE_LABEL : field.label || field.key;
+    let input;
+    if (field.type === 'select') {
+      input = document.createElement('select');
+      for (const option of field.options || []) {
+        const node = document.createElement('option');
+        node.value = String(plain(option) ? option.value : option);
+        node.textContent = String(plain(option) ? option.label ?? option.value : field.optionLabels?.[node.value] ?? OPTION_LABELS[field.key]?.[node.value] ?? option);
+        input.append(node);
+      }
+    } else if (field.type === 'array' || field.type === 'object' || field.multiline) {
+      input = document.createElement('textarea');
+      input.rows = field.key === 'lines' ? 6 : 3;
+      wrapper.classList.add('wide');
+    } else {
+      input = document.createElement('input');
+      input.type = field.secret ? 'password' : field.type === 'boolean' ? 'checkbox' : field.type === 'number' ? 'number' : 'text';
+    }
+    input.id = id;
+    if (field.secret) {
+      input.value = '';
+      input.autocomplete = 'new-password';
+      input.spellcheck = false;
+      input.placeholder = secretSet ? '已设置 · 留空保留' : '未设置';
+    } else if (field.type === 'boolean') input.checked = value === true;
+    else if (field.type === 'array') input.value = Array.isArray(value) ? value.join('\n') : '';
+    else if (field.type === 'object') input.value = JSON.stringify(value ?? {}, null, 2);
+    else input.value = value === undefined || value === null ? '' : String(value);
+    if (field.type === 'number') {
+      if (Number.isFinite(field.min)) input.min = field.min;
+      if (Number.isFinite(field.max)) input.max = field.max;
+      input.step = field.integer ? '1' : Number.isFinite(field.step) ? String(field.step) : 'any';
+    }
+    if (Number.isInteger(field.maxLength)) input.maxLength = field.maxLength;
+    if (field.placeholder && !field.secret) input.placeholder = field.placeholder;
+    input.required = field.required === true && !field.secret;
+    wrapper.append(label);
+    let range;
+    if (RANGE_FIELDS[field.key]) {
+      const pair = document.createElement('div'); pair.className = 'row';
+      range = document.createElement('input'); range.type = 'range';
+      range.min = input.min; range.max = input.max; range.step = input.step;
+      // min=.01 and step=.05 have no native step position at the default 1.
+      // Use an explicit .05 adjustment so both controls keep exact saved values.
+      if (field.key === 'temperature') {
+        range.step = input.step = 'any';
+        range.dataset.step = input.dataset.step = String(field.step);
+        for (const control of [range, input]) control.addEventListener('keydown', event => {
+          if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+          if (control === input && ['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+          event.preventDefault();
+          const direction = ['ArrowUp', 'ArrowRight'].includes(event.key) ? 1 : -1;
+          const next = Math.max(field.min, Math.min(field.max, Number((Number(input.value) + direction * field.step).toFixed(2))));
+          input.value = range.value = String(next);
+          updateProfileControls();
+        });
+      }
+      range.value = input.value;
+      range.setAttribute('aria-label', label.textContent + '滑块');
+      range.style.cssText = 'flex:1;min-width:120px;width:auto';
+      input.style.cssText = 'width:100px';
+      range.addEventListener('input', () => {
+        if (field.key === 'temperature') range.value = String(Math.max(field.min, Math.min(field.max, Number((Math.round(Number(range.value) / field.step) * field.step).toFixed(2)))));
+        input.value = range.value;
+        updateProfileControls();
+      });
+      range.addEventListener('change', () => { input.value = range.value; updateProfileControls(); });
+      input.addEventListener('input', () => { if (input.value !== '' && Number.isFinite(Number(input.value))) range.value = input.value; });
+      pair.append(range, input); wrapper.append(pair);
+    } else wrapper.append(input);
+    if (field.key === 'serviceDir') input.addEventListener('input', updateServiceControls);
+    let clear, secretState;
+    if (field.secret) {
+      clear = document.createElement('input');
+      clear.type = 'checkbox';
+      const clearLabel = document.createElement('label');
+      clearLabel.className = 'check';
+      clearLabel.append(clear, document.createTextNode('清除已保存密钥（保存后生效）'));
+      clear.addEventListener('change', () => { input.disabled = clear.checked; if (clear.checked) input.value = ''; });
+      wrapper.append(clearLabel);
+      const state = document.createElement('p');
+      state.className = 'hint';
+      state.textContent = secretSet ? '当前：已设置，密钥内容不回显。' : '当前：未设置。';
+      wrapper.append(state); secretState = state;
+    }
+    if (field.key === 'temperature') field.hint = [field.hint, '范围 0.01–2；滑块与方向键按 0.05 调节，数字框保留精确值。'].filter(Boolean).join(' ');
+    if (field.hint || field.type === 'array') {
+      const hint = document.createElement('p');
+      hint.className = 'hint';
+      hint.textContent = [field.hint, field.type === 'array' ? `每行${field.key === 'lines' ? '一句' : '一项'}，空行忽略${field.maxItems ? `；最多 ${field.maxItems} 条` : ''}。` : ''].filter(Boolean).join(' ');
+      wrapper.append(hint);
+    }
+    if (PROFILE_FIELDS.includes(field.key)) for (const event of ['input', 'change']) input.addEventListener(event, updateProfileControls);
+    controls.set(field.key, { field, input, clear, range, secretState });
+    return wrapper;
+  }
+  async function loadConfig() {
+    configReady = false;
+    $('configFieldset').disabled = true;
+    $('reloadConfig').disabled = true;
+    message('configMessage', '正在读取配置…');
+    try {
+      const out = await api('extensions.config.get', { id: ID });
+      if (!active) return false;
+      if (out.id !== ID || !Array.isArray(out.spec) || !plain(out.values) || !plain(out.secretSet) || typeof out.canEdit !== 'boolean') throw new Error('配置响应格式异常，已暂停保存；请重新读取。');
+      const keys = new Set();
+      for (const field of out.spec) {
+        if (!plain(field) || !/^[a-zA-Z][a-zA-Z0-9_]{0,31}$/.test(field.key) || ['__proto__','constructor','prototype'].includes(field.key) || keys.has(field.key) || !['string','number','boolean','select','array','object'].includes(field.type)) throw new Error('配置字段声明异常，已暂停保存。');
+        keys.add(field.key);
+      }
+      controls.clear();
+      $('configFields').replaceChildren();
+      const groups = new Map();
+      for (const [key, title, description] of [['voice', '当前音色设置', '以下 14 项一起保存到音色方案。可先编辑，再保存为方案，无须先保存全局配置。'], ['global', '全局设置', '启用状态、台词、冷却与翻译等设置独立于音色方案；切换方案时保留。']]) {
+        const group = document.createElement('fieldset');
+        group.className = 'wide';
+        group.style.cssText = 'border:1px solid var(--edge);border-radius:8px;padding:14px';
+        const legend = document.createElement('legend');
+        legend.textContent = title;
+        const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = description;
+        hint.style.marginBottom = '12px';
+        const grid = document.createElement('div'); grid.className = 'grid';
+        group.append(legend, hint, grid); $('configFields').append(group); groups.set(key, grid);
+      }
+      for (const field of out.spec) {
+        const value = field.secret ? undefined : own(out.values, field.key) ? out.values[field.key] : field.default;
+        groups.get(PROFILE_FIELDS.includes(field.key) ? 'voice' : 'global').append(fieldControl(field, value, out.secretSet[field.key] === true));
+      }
+      savedServiceDir = typeof out.values.serviceDir === 'string' ? out.values.serviceDir.trim() : '';
+      configReady = true;
+      canEdit = out.canEdit;
+      if (profilesReady) selectProfile(selectedProfileId);
+      updateFreezeSupport();
+      updateServiceControls();
+      $('configFieldset').disabled = !canEdit || !out.spec.length;
+      message('configMessage', !canEdit ? '此扩展由用户目录提供，宿主标记为只读。请通过 Roost 扩展市场安装后配置。' : out.spec.length ? '配置已读取。' : '此版本未声明配置项。');
+      return true;
+    } catch (error) {
+      if (active) message('configMessage', '配置读取失败，保存已暂停。' + scrub(error.message), 'error');
+      return false;
+    } finally { $('reloadConfig').disabled = false; updateProfileControls(); updateServiceControls(); }
+  }
+  function profileSnapshot() {
+    const values = {};
+    for (const key of PROFILE_FIELDS) {
+      const control = controls.get(key);
+      if (!control) continue;
+      const { field, input } = control;
+      values[key] = field.type === 'boolean' ? input.checked : field.type === 'number' ? (input.value.trim() ? Number(input.value) : null) : input.value;
+    }
+    return { name: $('profileName').value, values };
+  }
+  function profileDirty() {
+    if (!profileBaseline || assigningProfile) return false;
+    const current = profileSnapshot();
+    return current.name !== profileBaseline.name || PROFILE_FIELDS.some(key => !Object.is(current.values[key], profileBaseline.values[key]));
+  }
+  function profilePayload() {
+    const name = $('profileName').value.trim();
+    if (!name || Array.from(name).length > 40 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error('方案名需要 1–40 个字符，请使用单行名称。');
+    const values = collectConfig(PROFILE_FIELDS).values;
+    for (const key of ['refAudio', 'promptText', 'sovitsWeights', 'gptWeights']) if (!values[key]?.trim()) throw new Error('音色方案缺少必填项：参考音频、参考文本和两项模型权重。');
+    return { op: 'save', ...(selectedProfileId ? { id: selectedProfileId } : {}), name, values };
+  }
+  function selectProfile(id) {
+    selectedProfileId = profileItems.some(item => item.id === id) ? id : '';
+    const selected = profileItems.find(item => item.id === selectedProfileId);
+    assigningProfile = true;
+    $('profileSelect').value = selectedProfileId;
+    $('profileName').value = selected?.name || '';
+    for (const key of PROFILE_FIELDS) {
+      const control = controls.get(key);
+      if (!control) continue;
+      const value = selected && own(selected.values, key) ? selected.values[key] : control.field.default;
+      if (control.field.type === 'boolean') control.input.checked = value === true;
+      else control.input.value = value == null ? '' : String(value);
+      if (control.range) control.range.value = control.input.value;
+    }
+    profileBaseline = profileSnapshot();
+    assigningProfile = false;
+    updateProfileControls();
+  }
+  function updateProfileControls() {
+    const blocked = profilesBusy || !profilesReady || !configReady || !canEdit || $('configFieldset').disabled || !!draftResolve;
+    $('profilesFieldset').disabled = blocked;
+    const selected = profileItems.some(item => item.id === selectedProfileId);
+    for (const id of ['applyProfile', 'removeProfile']) $(id).disabled = blocked || !selected;
+    const dirty = profileDirty();
+    let valid = false;
+    try { profilePayload(); valid = true; } catch {}
+    $('saveProfile').disabled = blocked || !dirty || !valid;
+    $('revertProfile').disabled = blocked || !dirty;
+    $('profileDirty').hidden = !dirty;
+    $('reloadProfiles').disabled = profilesBusy || !!draftResolve;
+  }
+  function finishDraft(choice) {
+    if (!draftResolve) return;
+    const resolve = draftResolve; draftResolve = null;
+    $('draftDialog').close(); updateProfileControls(); resolve(choice);
+  }
+  async function guardDraft(continuation) {
+    if (profilesBusy || draftResolve) return false;
+    if (profileDirty()) {
+      const choice = await new Promise(resolve => {
+        draftResolve = resolve;
+        $('draftDialog').showModal(); updateProfileControls(); $('draftCancel').focus();
+      });
+      if (choice === 'cancel') return false;
+      if (choice === 'save' && !await changeProfile('save')) return false;
+    }
+    await continuation();
+    return true;
+  }
+  function renderProfiles(data, preferredId = profilesReady ? selectedProfileId : data.activeId ?? data.items?.[0]?.id) {
+    if (!Array.isArray(data.items) || data.items.some(item => !plain(item) || typeof item.id !== 'string' || typeof item.name !== 'string' || !plain(item.values)) || (data.activeId !== undefined && typeof data.activeId !== 'string')) throw new Error('音色方案响应格式异常。');
+    profileItems = data.items;
+    const selectedId = profileItems.some(item => item.id === preferredId) ? preferredId : preferredId === '' ? '' : profileItems[0]?.id || '';
+    $('profileSelect').replaceChildren();
+    const empty = document.createElement('option'); empty.value = ''; empty.textContent = '新建方案'; $('profileSelect').append(empty);
+    for (const item of profileItems) {
+      const option = document.createElement('option'); option.value = item.id;
+      option.textContent = item.name + (item.id === data.activeId ? ' · 正在使用' : '');
+      $('profileSelect').append(option);
+    }
+    selectedProfileId = selectedId;
+    $('profileSelect').value = selectedId;
+    const current = profileItems.find(item => item.id === data.activeId);
+    $('profileActive').textContent = `${current ? '正在使用：' + current.name : '当前配置未对应已应用的方案'} · 已保存 ${profileItems.length}/50 套。选择方案可编辑音色，保存更新同一方案；点击「应用方案」才切换服务配置。`;
+    profilesReady = true;
+    if (configReady) selectProfile(selectedId);
+    updateProfileControls();
+  }
+  async function loadProfiles() {
+    if (profilesBusy) return;
+    profilesBusy = true; updateProfileControls();
+    message('profilesMessage', '正在读取音色方案…');
+    try {
+      const data = await action('profiles', { op: 'list' });
+      if (!active) return;
+      renderProfiles(data);
+      message('profilesMessage', '音色方案已读取。');
+    } catch (error) {
+      if (active) message('profilesMessage', scrub(error.message), 'error');
+    } finally { profilesBusy = false; updateProfileControls(); }
+  }
+  async function changeProfile(op) {
+    if (profilesBusy || !profilesReady || !configReady || !canEdit || $('configFieldset').disabled) return false;
+    const id = selectedProfileId;
+    const selected = profileItems.find(item => item.id === id);
+    if (op !== 'save' && !selected) return false;
+    if (op === 'save' && !profileDirty()) return true;
+    const name = $('profileName').value.trim();
+    if (op === 'remove' && !window.confirm(`删除音色方案「${selected.name}」？这只删除保存项，正在使用的音色配置会保留。`)) return;
+    let payload;
+    try {
+      payload = op === 'save' ? profilePayload() : { op, id };
+    } catch (error) { message('profilesMessage', scrub(error.message), 'error'); updateProfileControls(); return false; }
+    profilesBusy = true;
+    $('configFieldset').disabled = true; $('reloadConfig').disabled = true;
+    updateProfileControls();
+    message('profilesMessage', '正在更新音色方案…');
+    try {
+      const data = await action('profiles', payload);
+      if (!active) return;
+      const saved = op === 'save' ? data.items?.find(item => id ? item.id === id : item.name === name) : undefined;
+      renderProfiles(data, saved?.id ?? (op === 'remove' ? '' : id));
+      if (op === 'apply') await refreshStatus();
+      message('profilesMessage', op === 'save' ? '方案已保存。点击「应用方案」才会启用这套音色设置。' : data.message || '音色方案已更新。', 'success');
+      return true;
+    } catch (error) { if (active) message('profilesMessage', scrub(error.message), 'error'); return false; }
+    finally {
+      profilesBusy = false;
+      $('configFieldset').disabled = !configReady || !canEdit || !controls.size;
+      $('reloadConfig').disabled = false; updateProfileControls();
+    }
+  }
+  function collectConfig(keys) {
+    const values = Object.create(null);
+    const secrets = Object.create(null);
+    for (const [key, { field, input, clear }] of controls) {
+      if (keys && !keys.includes(key)) continue;
+      if (field.secret) {
+        if (clear?.checked) secrets[key] = '';
+        else if (input.value !== '') secrets[key] = input.value;
+        continue;
+      }
+      let value;
+      if (field.type === 'boolean') value = input.checked;
+      else if (field.type === 'number') {
+        if (!input.value.trim()) throw new Error(`${field.label}：请填写数字。`);
+        value = Number(input.value);
+        if (!Number.isFinite(value) || (field.integer && !Number.isInteger(value))) throw new Error(`${field.label}：请填写有效${field.integer ? '整数' : '数字'}。`);
+        if ((Number.isFinite(field.min) && value < field.min) || (Number.isFinite(field.max) && value > field.max)) throw new Error(`${field.label}：允许范围为 ${field.min}–${field.max}。`);
+      } else if (field.type === 'array') {
+        const rows = input.value.split(/\r?\n/).map(v => v.trim()).filter(Boolean);
+        if (field.maxItems && rows.length > field.maxItems) throw new Error(`${field.label}：最多 ${field.maxItems} 条。`);
+        value = rows.map(v => {
+          if (field.itemsType === 'number') { const n = Number(v); if (!Number.isFinite(n)) throw new Error(`${field.label}：每行应为数字。`); return n; }
+          if (field.itemsType === 'boolean') { if (!['true','false'].includes(v)) throw new Error(`${field.label}：每行应为 true 或 false。`); return v === 'true'; }
+          return v;
+        });
+      } else if (field.type === 'object') {
+        try { value = JSON.parse(input.value); } catch { throw new Error(`${field.label}：请填写有效 JSON 对象。`); }
+        if (!plain(value)) throw new Error(`${field.label}：请填写 JSON 对象。`);
+      } else value = input.value;
+      if (typeof value === 'string') {
+        if (field.required && !value.trim()) throw new Error(`${field.label}：请填写必填项。`);
+        if (field.maxLength && value.length > field.maxLength) throw new Error(`${field.label}：内容过长。`);
+        if (field.options && !field.options.some(option => String(plain(option) ? option.value : option) === value)) throw new Error(`${field.label}：请选择有效选项。`);
+        if (key === 'api') {
+          let url;
+          try { url = new URL(value); } catch { throw new Error('API 地址需要 http(s) 根地址。'); }
+          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('API 地址需要 http(s) 根地址，凭证请放密钥栏。');
+        }
+      }
+      values[key] = value;
+    }
+    return { values, secrets };
+  }
+  async function saveConfig(event) {
+    event.preventDefault();
+    if (!configReady || !canEdit) return;
+    try {
+      const patch = collectConfig([...controls.keys()].filter(key => !PROFILE_FIELDS.includes(key)));
+      $('configFieldset').disabled = true;
+      $('reloadConfig').disabled = true;
+      updateProfileControls();
+      message('configMessage', '正在保存…');
+      // The Host replaces the whole non-secret config. Preserve its latest applied
+      // voice values rather than copying the unsaved profile controls into this save.
+      const latest = await api('extensions.config.get', { id: ID });
+      if (latest.id !== ID || !plain(latest.values) || latest.canEdit !== true) throw new Error('当前配置读取异常，全局设置尚未保存，请重试。');
+      await api('extensions.config.save', { id: ID, values: { ...latest.values, ...patch.values }, secrets: patch.secrets });
+      for (const { field, input, clear, secretState } of controls.values()) if (field.secret) {
+        const changed = own(patch.secrets, field.key);
+        input.value = ''; input.disabled = false;
+        if (clear) clear.checked = false;
+        if (changed) {
+          input.placeholder = patch.secrets[field.key] ? '已设置 · 留空保留' : '未设置';
+          if (secretState) secretState.textContent = patch.secrets[field.key] ? '当前：已设置，密钥内容不回显。' : '当前：未设置。';
+        }
+      }
+      if (!active) return;
+      savedServiceDir = String(patch.values.serviceDir ?? savedServiceDir).trim(); updateServiceControls();
+      message('configMessage', '全局设置与密钥已保存。音色方案草稿仍保留，请使用「保存方案」和「应用方案」。', 'success');
+      await refreshStatus();
+    } catch (error) { if (active) message('configMessage', scrub(error.message), 'error'); }
+    finally { $('configFieldset').disabled = !configReady || !canEdit || !controls.size; $('reloadConfig').disabled = false; updateProfileControls(); }
+  }
+  function clearAudio() {
+    $('audio').pause();
+    $('audio').removeAttribute('src');
+    $('audio').load();
+    $('audio').hidden = true;
+    $('previewMeta').textContent = '';
+  }
+  function stopPreview(note = '') {
+    previewGeneration++;
+    previewAbort?.abort();
+    previewAbort = null;
+    clearTimeout(previewTimer);
+    clearTimeout(pollTimer);
+    previewTimer = pollTimer = null;
+    if (pollWake) { const wake = pollWake; pollWake = null; wake(); }
+    previewBusy = false;
+    $('preview').disabled = false;
+    $('stopPreview').disabled = true;
+    clearAudio();
+    if (note) message('previewMessage', note);
+  }
+  function waitPoll() {
+    return new Promise(resolve => {
+      pollWake = resolve;
+      pollTimer = setTimeout(() => { pollWake = null; pollTimer = null; resolve(); }, 1000);
+    });
+  }
+  async function startPreview() {
+    stopPreview();
+    previewBusy = true;
+    const generation = previewGeneration;
+    previewAbort = new AbortController();
+    const signal = previewAbort.signal;
+    const current = () => active && generation === previewGeneration && !signal.aborted;
+    $('preview').disabled = true;
+    $('stopPreview').disabled = false;
+    previewDeadline = Date.now() + 150000;
+    previewTimer = setTimeout(() => stopPreview('等待已达 150 秒，已停止轮询；后台任务可能继续，请检查服务后重试。'), 150000);
+    message('previewMessage', '正在提交试听任务…');
+    try {
+      const started = await action('startPreview', { text: $('previewText').value.trim() }, signal);
+      if (!current()) return;
+      if (typeof started.jobId !== 'string' || !started.jobId) throw new Error('试听任务未返回有效的任务编号。');
+      while (current() && Date.now() < previewDeadline) {
+        await waitPoll();
+        if (!current()) return;
+        const job = await action('job', { id: started.jobId }, signal);
+        if (!current()) return;
+        if (job.id !== started.jobId || !['running','done','error'].includes(job.status)) throw new Error('试听进度返回的数据格式异常。');
+        if (job.status === 'error') throw new Error(scrub(job.error || '语音合成失败，请检查模型与参考音频。'));
+        if (job.status === 'running') {
+          message('previewMessage', `正在生成… 已等待 ${Math.floor((Date.now() - previewDeadline + 150000) / 1000)} 秒。`);
+          continue;
+        }
+        message('previewMessage', '合成已完成，正在读取音频…');
+        const audio = await action('audio', { id: started.jobId }, signal);
+        if (!current()) return;
+        if (typeof audio.dataUrl !== 'string' || !/^data:audio\/wav;base64,[A-Za-z0-9+/=\r\n]+$/.test(audio.dataUrl)) throw new Error('音频数据格式异常，预期为 WAV dataURL。');
+        $('audio').src = audio.dataUrl;
+        $('audio').hidden = false;
+        const details = [];
+        if (typeof job.text === 'string') details.push('正文：' + scrub(job.text));
+        if (typeof job.source === 'string') details.push('来源：' + scrub(job.source));
+        if (typeof job.lang === 'string') details.push('语言：' + scrub(job.lang));
+        const duration = Number.isFinite(audio.durationSec) ? audio.durationSec : job.durationSec;
+        if (Number.isFinite(duration)) details.push(`时长：${duration.toFixed(2)} 秒`);
+        if (Number.isFinite(job.ms)) details.push(`耗时：${(job.ms / 1000).toFixed(1)} 秒`);
+        if (Number.isFinite(job.bytes)) details.push(`大小：${(job.bytes / 1024).toFixed(1)} KB`);
+        $('previewMeta').textContent = details.join(' · ');
+        message('previewMessage', '生成成功，点击播放器播放。本次仅本地试听，未发送 QQ；生成成功不等于 QQ 送达。', 'success');
+        void refreshStatus();
+        return;
+      }
+    } catch (error) { if (current()) message('previewMessage', scrub(error.message), 'error'); }
+    finally {
+      if (generation === previewGeneration) {
+        clearTimeout(previewTimer);
+        previewTimer = null;
+        previewAbort = null;
+        previewBusy = false;
+        $('preview').disabled = false;
+        $('stopPreview').disabled = $('audio').hidden;
+      }
+    }
+  }
+  function leave() {
+    if (draftResolve) finishDraft('cancel');
+    active = false;
+    const hadPreview = previewBusy || !$('audio').hidden;
+    stopPreview(hadPreview ? '已切离页面，试听轮询与音频已清理。' : '');
+    stopServicePolling();
+    for (const request of requests) request.abort();
+  }
+  $('configForm').addEventListener('submit', saveConfig);
+  $('reloadConfig').addEventListener('click', () => void guardDraft(async () => { await loadConfig(); await loadProfiles(); }));
+  $('reloadProfiles').addEventListener('click', () => void guardDraft(loadProfiles));
+  $('profileSelect').addEventListener('change', () => {
+    const nextId = $('profileSelect').value;
+    $('profileSelect').value = selectedProfileId;
+    void guardDraft(() => { selectProfile(nextId); message('profilesMessage', '已加载方案供编辑；点击「应用方案」才会启用。'); });
+  });
+  for (const event of ['input', 'change']) $('profileName').addEventListener(event, updateProfileControls);
+  $('saveProfile').addEventListener('click', () => void changeProfile('save'));
+  $('revertProfile').addEventListener('click', () => { selectProfile(selectedProfileId); message('profilesMessage', '方案修改已还原。'); });
+  $('newProfile').addEventListener('click', () => void guardDraft(() => {
+    selectProfile('');
+    message('profilesMessage', '已进入新建方案；14 项音色参数已恢复默认值，请填写名称和必填项后保存方案。');
+    $('profileName').focus();
+  }));
+  $('applyProfile').addEventListener('click', () => void guardDraft(() => changeProfile('apply')));
+  $('removeProfile').addEventListener('click', () => void guardDraft(() => changeProfile('remove')));
+  $('draftSave').addEventListener('click', () => finishDraft('save'));
+  $('draftDiscard').addEventListener('click', () => finishDraft('discard'));
+  $('draftCancel').addEventListener('click', () => finishDraft('cancel'));
+  $('draftDialog').addEventListener('cancel', event => { event.preventDefault(); finishDraft('cancel'); });
+  $('startService').addEventListener('click', () => void runService(serviceCanStop ? 'stop' : 'start'));
+  $('refreshStatus').addEventListener('click', () => { void refreshStatus(); void runService(); });
+  $('probe').addEventListener('click', () => void probe());
+  $('preview').addEventListener('click', () => void startPreview());
+  $('stopPreview').addEventListener('click', () => stopPreview('已停止等待与播放；后台合成可能继续。'));
+  window.addEventListener('pagehide', leave);
+  window.addEventListener('pageshow', () => { active = !document.hidden; if (active) { updateServiceControls(); void runService(); } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) leave(); else { active = true; updateServiceControls(); void runService(); } });
+  void loadConfig();
+  void loadProfiles();
+  void refreshStatus();
+  void runService();
+})();
+</script>
+</body>
+</html>

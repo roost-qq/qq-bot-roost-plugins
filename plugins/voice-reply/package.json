@@ -1,0 +1,10 @@
+{
+  "name": "roost-extension-voice-reply",
+  "version": "1.1.6",
+  "private": true,
+  "type": "module",
+  "description": "Roost 市场语音回复扩展：GPT-SoVITS、SILK 编码与本地试听",
+  "license": "ISC",
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "node --test test/*.test.mjs", "check": "node --check server.mjs && node --check actions-v4.mjs" }
+}

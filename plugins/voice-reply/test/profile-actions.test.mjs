@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { createActions } from '../actions-v4.mjs';
+import { MANIFEST } from '../lib/config.mjs';
+import { temporary } from './helpers.mjs';
+
+test('面板动作集成：保存编辑稿、切换后合成配置即时生效且保留全局', async t => {
+  const base = temporary(t), root = join(base, 'extensions', 'voice-reply'), data = join(base, 'data');
+  mkdirSync(root, { recursive: true });
+  const raw = { enabled: false, maxChars: 120, cooldownSec: 9, api: 'http://localhost:9880', refAudio: 'old.wav', promptText: 'original', sovitsWeights: 'old.pth', gptWeights: 'old.ckpt' };
+  writeFileSync(join(root, 'config.json'), JSON.stringify(raw));
+  const actions = createActions({ root, env: { VOICE_REPLY_DATA_DIR: data } });
+  assert.ok(MANIFEST.ui.actions.some(x => x.id === 'profiles'));
+  const saved = await actions.profiles({ op: 'save', name: '新音色', values: { api: 'http://localhost:9880', refAudio: 'new.wav', promptText: 'reference', promptLang: 'ja', textLang: 'auto', speed: 1.1, sovitsWeights: 'new.pth', gptWeights: 'new.ckpt', translateKey: 'never-store-this' } });
+  assert.equal(saved.ok, true, saved.message);
+  const id = saved.data.items[0].id;
+  assert.equal(JSON.parse(readFileSync(join(root, 'config.json'))).refAudio, 'old.wav');
+  assert.equal(JSON.stringify(saved).includes('never-store-this'), false);
+  const applied = await actions.profiles({ op: 'apply', id });
+  assert.equal(applied.ok, true, applied.message);
+  assert.equal(applied.data.activeId, id);
+  const config = JSON.parse(readFileSync(join(root, 'config.json')));
+  assert.equal(config.refAudio, 'new.wav'); assert.equal(config.maxChars, 120); assert.equal(config.cooldownSec, 9); assert.equal(config.enabled, false);
+  const status = await actions.status();
+  assert.equal(status.data.enabled, false); assert.equal(status.data.version, MANIFEST.version); assert.deepEqual(status.data.missing, []);
+  assert.equal((await actions.profiles({ op: 'unknown' })).ok, false);
+  assert.equal((await actions.profiles({ op: 'remove', id })).ok, true);
+  assert.equal(JSON.parse(readFileSync(join(root, 'config.json'))).refAudio, 'new.wav');
+});
