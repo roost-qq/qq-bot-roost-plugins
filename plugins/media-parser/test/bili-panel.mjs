@@ -67,11 +67,11 @@ test('DM config and test endpoints reject or ignore request-body targets and kee
   env.login.inspectState = 'valid';
   const spoof = { owner: true, chatId: 'evil-target', userId: 'evil-target', target: 'evil-target' };
   const saved = await env.route('PUT', '/bili/dm/config', {
-    body: { ...spoof, biliDmEnabled: true, biliDmPollSeconds: 90, biliDmIncludeSystem: true },
+    body: { ...spoof, biliDmEnabled: true, biliDmPollSeconds: 240, biliDmIncludeSystem: true },
   });
   assert.equal(saved.code, 200);
   assert.equal(env.ctx.config.biliDmEnabled, true);
-  assert.equal(env.ctx.config.biliDmPollSeconds, 90);
+  assert.equal(env.ctx.config.biliDmPollSeconds, 240);
   assert.equal(env.store.binding().target, 'owner-1');
   assert.equal(JSON.stringify(saved.data).includes('evil-target'), false);
   assert.equal(saved.data.dm.binding.mask.includes('owner'), false);
@@ -147,13 +147,15 @@ test('public aggregate responses and the page template never leak private object
   const html = await fs.readFile(new URL('../page.html', import.meta.url), 'utf8');
   const script = /<script>([\s\S]*?)<\/script>/.exec(html)[1];
   assert.doesNotThrow(() => new Function(script));
-  assert.match(html, /v0\.2\.0/);
+  assert.match(html, /v0\.4\.2/);
   assert.match(html, /B站私信提醒/);
   assert.match(html, /dm-login-start/);
   assert.match(html, /\/bili\/dm\/status/);
   assert.match(html, /\/bili\/login\/start/);
   assert.equal(script.includes('innerHTML'), false);
-  assert.equal(script.includes('localStorage'), false);
+  // v0.3 permits a bot-scoped, nonsecret provider preference.
+  assert.match(script, /media-parser\.dmProvider\./);
+  assert.doesNotMatch(script, /\.setItem\([^,\n]*,\s*(?:token|cookie|pngDataUrl)\s*\)/);
   assert.equal(script.includes('cdn'), false);
   assert.equal(script.includes("dm-login-start').click()"), false);
   assert.match(script, /pagehide/);

@@ -351,6 +351,37 @@ test('inspect validates the shared Cookie without exposing account identity', as
   assert.equal('uname' in offlineResult, false);
 });
 
+test('explicit inspect success replaces a stale QR error unless a QR session is active', async () => {
+  const settings = fakeSettings('COOKIE-A');
+  let failPoll = true;
+  const client = fakeClient({
+    async pollQr() {
+      this.pollCalls += 1;
+      if (failPoll) throw Object.assign(new Error('offline failure'), { code: 'BILI_COOKIE' });
+      return { state: 'waiting' };
+    },
+  });
+  const login = loginWith(settings, client);
+  try {
+    await login.start();
+    await until(() => login.status().state === 'error');
+    assert.equal(login.status().errorCode, 'BILI_COOKIE');
+    assert.deepEqual(await login.inspect(), { state: 'valid' });
+    assert.equal(login.status().state, 'valid');
+    assert.equal(login.status().errorCode, null);
+    assert.equal(login.status().errorSummary, null);
+
+    failPoll = false;
+    const started = await login.start();
+    assert.equal(['starting', 'waiting'].includes(started.state), true);
+    const activeState = login.status().state;
+    assert.deepEqual(await login.inspect(), { state: 'valid' });
+    assert.equal(login.status().state, activeState);
+  } finally {
+    login.deactivate();
+  }
+});
+
 test('manual Cookie save uses the same nav check and never enables anything else', async () => {
   const settings = fakeSettings();
   let navCalls = 0;

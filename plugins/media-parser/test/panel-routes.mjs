@@ -14,7 +14,9 @@ test('management template parses, uses JSON and scoped page token, and renders u
   assert.match(script, /Content-Type.*application\/json/);
   assert.match(script, /params\.set\('pt', token\)/);
   assert.equal(script.includes('innerHTML'), false);
-  assert.equal(script.includes('localStorage'), false);
+  // A fixed provider ID preference is allowed; authentication stays in requests.
+  assert.match(script, /media-parser\.dmProvider\./);
+  assert.doesNotMatch(script, /\.setItem\([^,\n]*,\s*(?:token|cookie|pngDataUrl)\s*\)/);
   assert.match(html, /不会向真实聊天发消息/);
 });
 

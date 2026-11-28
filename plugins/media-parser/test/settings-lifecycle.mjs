@@ -96,11 +96,11 @@ test('flush waits for queued writes and later writes are not accepted by a stale
   const active = { value: true };
   const settings = createSettings(context(dir, config, active), { isActive: () => active.value });
   await settings.ready;
-  const pending = settings.saveConfig({ biliDmPollSeconds: 120 });
+  const pending = settings.saveConfig({ biliDmPollSeconds: 240 });
   const flushed = settings.flush();
   await Promise.all([pending, flushed]);
-  assert.equal(settings.current().biliDmPollSeconds, 120);
+  assert.equal(settings.current().biliDmPollSeconds, 240);
   active.value = false;
   await assert.rejects(settings.saveConfig({ biliDmPollSeconds: 180 }), /已拒绝写入/);
-  assert.equal(settings.current().biliDmPollSeconds, 120);
+  assert.equal(settings.current().biliDmPollSeconds, 240);
 });

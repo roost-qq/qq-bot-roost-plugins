@@ -1,14 +1,19 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { BiliDmStoreError, compareSeq, ensureConversation, makeMessageKey } from './bili-dm-store.js';
 import { normalizeMessage, shortMessageId } from './bili-dm-content.js';
+import { DM_POLL_LIMITS } from './private-message-request-policy.js';
 
-export const REQUEST_BUDGET = 20;
-export const DEFAULT_POLL_SECONDS = 60;
-export const MIN_POLL_SECONDS = 60;
-export const MAX_POLL_SECONDS = 1800;
+export const REQUEST_BUDGET = 6;
+export const DEFAULT_POLL_SECONDS = DM_POLL_LIMITS.defaultSeconds;
+export const MIN_POLL_SECONDS = DM_POLL_LIMITS.minSeconds;
+export const MAX_POLL_SECONDS = DM_POLL_LIMITS.maxSeconds;
 export const MIN_BACKOFF_MS = 60_000;
 export const MAX_BACKOFF_MS = 30 * 60_000;
 const DISCOVERY_PAGE_SIZE = 100;
 const MESSAGE_PAGE_SIZE = 100;
+const ROUND_DEADLINE_MS = 120_000;
+const CATCHUP_MIN_DELAY_MS = 60_000;
+const CATCHUP_JITTER_RATIO = 0.2;
 const SUPPORTED_SYSTEM_TYPES = new Set([1, 5, 7, 8, 9]);
 const RECALLED_TEXT = '该消息已被撤回，仅显示状态。';
 const RECALLED_TARGET_MAX = 512;
@@ -52,6 +57,10 @@ function maskTarget(target) {
   const value = String(target || '');
   if (!value) return '';
   return value.length <= 4 ? '***' : `***${value.slice(-4)}`;
+}
+
+function credentialFingerprint(value) {
+  return createHash('sha256').update(String(value)).digest('hex');
 }
 
 function createBudget(limit = REQUEST_BUDGET) {
@@ -100,8 +109,13 @@ function normalizeStatusError(error) {
   if (code === 'BILI_RATE_LIMIT') return 'DM_RATE_LIMIT';
   if (code === 'BILI_HTTP') return 'DM_HTTP';
   if (code === 'BILI_RESPONSE') return 'DM_RESPONSE';
-  if (code === 'BILI_API') return 'DM_API';
+  if (code === 'BILI_API' || code === 'BILI_RISK') return 'DM_API';
   if (code === 'BILI_CANCELLED') return 'DM_CANCELLED';
+  if (code === 'REQUEST_BUDGET') return 'DM_BUDGET';
+  if (code === 'REQUEST_DEADLINE') return 'DM_BUDGET';
+  if (code === 'REQUEST_COOLDOWN') return 'DM_RATE_LIMIT';
+  if (code === 'REQUEST_POLICY_UNAVAILABLE' || code === 'REQUEST_POLICY_CLOSED') return 'DM_STATE_CORRUPT';
+  if (code === 'REQUEST_CANCELLED') return 'DM_CANCELLED';
   if (code.startsWith('DM_')) return safeCode(code);
   return 'DM_ERROR';
 }
@@ -211,6 +225,7 @@ export function createBiliDmService({
   settings, client, store, delivery = null, now = () => Date.now(), random = Math.random,
   setTimeout: setTimeoutImpl = globalThis.setTimeout, clearTimeout: clearTimeoutImpl = globalThis.clearTimeout,
   isActive = () => true, logger = null, autoSchedule = true, pollSeconds,
+  requestPolicy = null, requestScope = null, onSyncSuccess = null,
 } = {}) {
   if (!settings || typeof settings.current !== 'function' || typeof settings.getBiliCookie !== 'function') {
     throw new TypeError('createBiliDmService requires the shared settings API');
@@ -220,6 +235,14 @@ export function createBiliDmService({
   }
   if (!store || typeof store.transaction !== 'function' || typeof store.read !== 'function') {
     throw new TypeError('createBiliDmService requires a Bili DM store');
+  }
+  if (requestPolicy !== null && (typeof requestPolicy?.status !== 'function'
+    || typeof requestPolicy?.recordSyncSuccess !== 'function'
+    || typeof requestPolicy?.recordFailure !== 'function')) {
+    throw new TypeError('requestPolicy must expose status, recordSyncSuccess and recordFailure');
+  }
+  if (requestPolicy !== null && requestScope === null) {
+    throw new TypeError('requestScope is required when requestPolicy is supplied');
   }
 
   let disposed = false;
@@ -234,6 +257,7 @@ export function createBiliDmService({
   let stateName = 'disabled';
   let reasonCode = '';
   let nextRetryAt = 0;
+  let catchupAt = 0;
   let backoffLevel = 0;
   let lastCheckAt = 0;
   let lastSuccessAt = null;
@@ -241,12 +265,18 @@ export function createBiliDmService({
   let pendingNotice = null;
   let authBlockedRevision = null;
   let lastPruneAt = 0;
-  let poll = clampPoll(pollSeconds ?? 60);
+  let poll = clampPoll(pollSeconds ?? DEFAULT_POLL_SECONDS);
+  let policySnapshot = null;
+  let roundWorkflowId = '';
+  let roundDeadline = null;
 
   const readiness = Promise.all([
     settings.ready ? settings.ready : Promise.resolve(),
     store.ready ? store.ready : Promise.resolve(),
-  ]).then(() => api).catch((error) => {
+  ]).then(async () => {
+    await refreshPolicyStatus();
+    return api;
+  }).catch((error) => {
     stateName = 'error';
     reasonCode = safeCode(normalizeStatusError(error) === 'DM_ERROR' ? 'DM_STATE_CORRUPT' : normalizeStatusError(error));
     throw error;
@@ -272,6 +302,156 @@ export function createBiliDmService({
 
   function cookieValue() {
     try { return String(settings.getBiliCookie?.() || ''); } catch { return ''; }
+  }
+
+  function requestContextCookie() {
+    return cookieValue();
+  }
+
+  async function policyScope() {
+    let scope = requestScope;
+    if (typeof scope === 'function') {
+      try {
+        const context = {
+          providerId: 'bilibili',
+          endpoint: null,
+          query: {},
+          kind: 'control',
+        };
+        context['cookie'] = requestContextCookie();
+        scope = await scope(context);
+      } catch {
+        scope = null;
+      }
+    }
+    if (scope && typeof scope.providerId === 'string' && scope.providerId
+      && typeof scope.accountKey === 'string' && scope.accountKey) {
+      return {
+        providerId: scope.providerId,
+        accountKey: scope.accountKey,
+        credentialVersion: scope.credentialVersion,
+        workflowId: scope.workflowId,
+      };
+    }
+    const cookie = cookieValue();
+    if (!cookie) return null;
+    const fingerprint = credentialFingerprint(cookie);
+    return {
+      providerId: 'bilibili',
+      accountKey: `credential:${fingerprint.slice(0, 32)}`,
+      credentialVersion: fingerprint,
+    };
+  }
+
+  async function refreshPolicyStatus() {
+    if (!requestPolicy) {
+      policySnapshot = null;
+      return;
+    }
+    try {
+      const scope = await policyScope();
+      if (!scope) {
+        policySnapshot = null;
+        return;
+      }
+      policySnapshot = await requestPolicy.status({
+        ...scope,
+        pollSeconds: readConfig().pollSeconds,
+      });
+    } catch {
+      policySnapshot = null;
+    }
+  }
+
+  function syncCycleMap(state) {
+    return isObject(state?.syncCycles) ? state.syncCycles : {};
+  }
+
+  function workflowIdFor(robotKey, fingerprint) {
+    return `bili-sync:${credentialFingerprint(`${robotKey}:${fingerprint}:${randomUUID()}`)}`;
+  }
+
+  function syncCycleKey(robotKey, fingerprint) {
+    return credentialFingerprint(`${robotKey}:${fingerprint}`);
+  }
+
+  function pruneSyncCycles(draft) {
+    const entries = Object.entries(draft.syncCycles);
+    if (entries.length <= 8) return;
+    entries.sort((left, right) => Number(left[1]?.createdAt || 0) - Number(right[1]?.createdAt || 0));
+    for (const [key] of entries.slice(0, entries.length - 8)) delete draft.syncCycles[key];
+  }
+
+  async function ensureSyncWorkflow(fingerprint, run) {
+    if (!fingerprint) return '';
+    const robotKey = store.read((state) => state.robotKey);
+    const cycleKey = syncCycleKey(robotKey, fingerprint);
+    const existing = store.read((state) => {
+      const value = syncCycleMap(state)[cycleKey]?.workflowId;
+      return typeof value === 'string' && value ? value : '';
+    });
+    if (existing) return existing;
+    const workflowId = workflowIdFor(robotKey, fingerprint);
+    await store.transaction((draft) => {
+      if (!isObject(draft.syncCycles)) draft.syncCycles = {};
+      const current = draft.syncCycles[cycleKey]?.workflowId;
+      if (typeof current !== 'string' || !current) {
+        draft.syncCycles[cycleKey] = { workflowId, createdAt: now() };
+      }
+      pruneSyncCycles(draft);
+      draft.updatedAt = now();
+    }, { guard: () => isCurrent(run) });
+    return store.read((state) => {
+      const value = syncCycleMap(state)[cycleKey]?.workflowId;
+      return typeof value === 'string' && value ? value : workflowId;
+    });
+  }
+
+  async function rotateSyncWorkflow(fingerprint, run) {
+    if (!fingerprint) return '';
+    const robotKey = store.read((state) => state.robotKey);
+    const cycleKey = syncCycleKey(robotKey, fingerprint);
+    const workflowId = workflowIdFor(robotKey, fingerprint);
+    await store.transaction((draft) => {
+      if (!isObject(draft.syncCycles)) draft.syncCycles = {};
+      draft.syncCycles[cycleKey] = { workflowId, createdAt: now() };
+      pruneSyncCycles(draft);
+      draft.updatedAt = now();
+    }, { guard: () => isCurrent(run) });
+    return workflowId;
+  }
+
+  async function recordPolicySuccess(run, workflowId = '') {
+    if (!run || !workflowId || !isCurrent(run)) return { recorded: false, stale: true };
+    const scope = run.policyScope || null;
+    if (!scope) return { recorded: false, stale: true };
+    let result = { recorded: true };
+    try {
+      if (typeof onSyncSuccess === 'function') {
+        await onSyncSuccess({ workflowId, scope: { ...scope } });
+      } else if (requestPolicy) {
+        if (!isCurrent(run)) return { recorded: false, stale: true };
+        result = await requestPolicy.recordSyncSuccess({ ...scope, workflowId });
+      }
+    } catch { /* policy state failures are surfaced through its own status */ }
+    await refreshPolicyStatus();
+    return result || { recorded: false };
+  }
+
+  async function recordPolicyFailure(error) {
+    if (!requestPolicy || !error || typeof error !== 'object') return;
+    const code = String(error.code || '');
+    if (code.startsWith('REQUEST_') || error.requestPolicyRecorded === true) return;
+    try {
+      const scope = await policyScope();
+      if (!scope) return;
+      await requestPolicy.recordFailure({
+        ...scope,
+        retryAfterMs: Number.isFinite(error.retryAfterMs) ? error.retryAfterMs : 0,
+        status: Number.isFinite(error.status) ? error.status : 0,
+        apiCode: Number.isFinite(error.apiCode) ? error.apiCode : 0,
+      });
+    } catch { /* policy state failures are surfaced through its own status */ }
   }
 
   function isCurrent(run) {
@@ -332,11 +512,37 @@ export function createBiliDmService({
     timer?.unref?.();
   }
 
+  function effectivePollSeconds() {
+    const configured = readConfig().pollSeconds;
+    const adaptive = Number(policySnapshot?.effectiveIntervalSeconds);
+    return Math.max(configured, Number.isFinite(adaptive) ? adaptive : 0);
+  }
+
+  function catchupDelay(at) {
+    const jitter = Math.round(CATCHUP_MIN_DELAY_MS
+      * Math.max(0, Math.min(1, Number(random()) || 0))
+      * CATCHUP_JITTER_RATIO);
+    const earliest = at + CATCHUP_MIN_DELAY_MS + jitter;
+    const policyAt = Number.isFinite(policySnapshot?.nextAllowedAt)
+      ? policySnapshot.nextAllowedAt : 0;
+    const retryAt = nextRetryAt > at ? nextRetryAt : 0;
+    const scheduledAt = Math.max(earliest, policyAt, retryAt);
+    catchupAt = scheduledAt;
+    return Math.max(1, Math.round(scheduledAt - at));
+  }
+
   function scheduleNext() {
     if (!running || disposed) return;
-    const delay = nextRetryAt > now()
-      ? Math.max(1, nextRetryAt - now())
-      : Math.round(poll * 1000 * (1 + Math.max(0, Math.min(1, Number(random()) || 0)) * 0.1));
+    const at = now();
+    if (stateName === 'catching_up') {
+      schedule(catchupDelay(at));
+      return;
+    }
+    catchupAt = 0;
+    const delay = nextRetryAt > at
+      ? Math.max(1, nextRetryAt - at)
+      : Math.round(effectivePollSeconds() * 1000
+        * (1 + Math.max(0, Math.min(1, Number(random()) || 0)) * 0.2));
     schedule(delay);
   }
 
@@ -349,16 +555,19 @@ export function createBiliDmService({
       backoffLevel = 0;
       noteRecovery();
     }
+    if (name !== 'catching_up') catchupAt = 0;
   }
 
-  function handleFailure(run, error) {
+  async function handleFailure(run, error) {
     if (!isCurrent(run)) return;
+    catchupAt = 0;
     const code = normalizeStatusError(error);
     if (code === 'DM_CANCELLED' || code === 'DM_STALE') return;
     if (code === 'DM_BUDGET') {
       setState('catching_up', 'DM_BUDGET');
       return;
     }
+    await recordPolicyFailure(error);
     if (code === 'DM_AUTH') {
       authBlockedRevision = run ? run.revision : readRevision();
       setState('waiting_login', 'DM_AUTH');
@@ -378,7 +587,9 @@ export function createBiliDmService({
     backoffLevel += 1;
     const exponential = Math.min(MAX_BACKOFF_MS, MIN_BACKOFF_MS * (2 ** Math.min(backoffLevel - 1, 6)));
     const retry = Number(error?.retryAfterMs) || 0;
-    const delay = Math.max(MIN_BACKOFF_MS, exponential, retry);
+    const nextAllowedAt = Number.isFinite(error?.nextAllowedAt) ? error.nextAllowedAt : 0;
+    const policyDelay = nextAllowedAt > now() ? nextAllowedAt - now() : 0;
+    const delay = Math.max(MIN_BACKOFF_MS, exponential, retry, policyDelay);
     nextRetryAt = now() + delay;
     setState('backoff', code);
     noteFault(code);
@@ -435,6 +646,8 @@ export function createBiliDmService({
           endTs: discovery.endTs || undefined,
           size: DISCOVERY_PAGE_SIZE,
           signal: run.controller.signal,
+          expiresAt: roundDeadline,
+          workflowId: roundWorkflowId,
         });
       } catch (error) {
         throw error;
@@ -654,6 +867,8 @@ export function createBiliDmService({
           endSeqno: job.endSeqno,
           size: MESSAGE_PAGE_SIZE,
           signal: run.controller.signal,
+          expiresAt: roundDeadline,
+          workflowId: roundWorkflowId,
         });
       } catch (error) {
         if (error?.code === 'BILI_API') {
@@ -904,6 +1119,13 @@ export function createBiliDmService({
       setState('waiting_login', 'DM_NO_COOKIE');
       return;
     }
+    run.credentialFingerprint = credentialFingerprint(cookie);
+    run.workflowId = await ensureSyncWorkflow(run.credentialFingerprint, run);
+    if (!isCurrent(run)) return;
+    run.policyScope = await policyScope();
+    if (!isCurrent(run)) return;
+    roundWorkflowId = run.workflowId;
+    roundDeadline = now() + ROUND_DEADLINE_MS;
     const binding = bindingSnapshot();
     if (!binding.target) {
       setState('waiting_owner', 'DM_NO_OWNER');
@@ -926,7 +1148,11 @@ export function createBiliDmService({
       budget.take();
       let nav;
       try {
-        nav = await client.nav(cookie, { signal: run.controller.signal });
+        nav = await client.nav(cookie, {
+          signal: run.controller.signal,
+          expiresAt: roundDeadline,
+          workflowId: roundWorkflowId,
+        });
       } catch (error) {
         throw error;
       }
@@ -1001,6 +1227,12 @@ export function createBiliDmService({
     }
     if (!after?.discovery?.scanActive) {
       setState('watching', '');
+      const outcome = await recordPolicySuccess(run, run.workflowId);
+      if (isCurrent(run) && outcome?.recorded !== false) {
+        try {
+          await rotateSyncWorkflow(run.credentialFingerprint, run);
+        } catch { /* keep the previous durable cycle if rotation cannot commit */ }
+      }
     } else {
       setState('catching_up', budget.remaining === 0 ? 'DM_BUDGET' : 'DM_CATCHUP');
       return;
@@ -1028,8 +1260,9 @@ export function createBiliDmService({
       try {
         await runRound(run);
       } catch (error) {
-        handleFailure(run, error);
+        await handleFailure(run, error);
       } finally {
+        await refreshPolicyStatus();
         await deliverNotice(run);
         if (activeRound === run) activeRound = null;
         if (roundPromise === promise) roundPromise = null;
@@ -1053,6 +1286,7 @@ export function createBiliDmService({
     if (!cookieValue()) setState('waiting_login', 'DM_NO_COOKIE');
     else if (!bindingSnapshot().target) setState('waiting_owner', 'DM_NO_OWNER');
     else setState('initializing', 'DM_BASELINE');
+    refreshPolicyStatus().catch(() => {});
     if (autoSchedule) schedule(1);
     return status();
   }
@@ -1105,10 +1339,17 @@ export function createBiliDmService({
     poll = config.pollSeconds;
     if (!config.enabled && running) {
       pause('DM_DISABLED');
+      refreshPolicyStatus().catch(() => {});
       return status();
     }
     if (config.enabled && !running && !disposed) start();
-    if (running && autoSchedule) scheduleNext();
+    if (running && autoSchedule) {
+      refreshPolicyStatus().catch(() => {}).then(() => {
+        if (running && !disposed) scheduleNext();
+      });
+    } else {
+      refreshPolicyStatus().catch(() => {});
+    }
     return status();
   }
 
@@ -1134,10 +1375,25 @@ export function createBiliDmService({
     } catch (error) {
       counters = null;
     }
+    const policy = policySnapshot ? {
+      paused: policySnapshot.paused === true,
+      pauseReason: policySnapshot.pauseReason || null,
+      cooldownReason: policySnapshot.cooldownReason || null,
+      cooldownScope: policySnapshot.cooldownScope || null,
+      nextAllowedAt: policySnapshot.nextAllowedAt ?? null,
+      requiresManualRecovery: policySnapshot.requiresManualRecovery === true,
+      recoveryProbePending: policySnapshot.recoveryProbePending === true,
+      recoveryProbeExpiresAt: policySnapshot.recoveryProbeExpiresAt ?? null,
+      configuredIntervalSeconds: Number(policySnapshot.configuredIntervalSeconds) || config.pollSeconds,
+      effectiveIntervalSeconds: Number(policySnapshot.effectiveIntervalSeconds) || config.pollSeconds,
+      adaptiveMultiplier: Number(policySnapshot.adaptiveMultiplier) || 1,
+      budget: policySnapshot.budget || null,
+      lastEffectiveSyncAt: policySnapshot.lastEffectiveSyncAt ?? null,
+    } : null;
     return {
       state: stateName,
       reasonCode: reasonCode ? safeCode(reasonCode) : '',
-      nextRetryAt: nextRetryAt || null,
+      nextRetryAt: (stateName === 'catching_up' && catchupAt ? catchupAt : nextRetryAt) || null,
       lastCheckAt: lastCheckAt || null,
       lastSuccessAt,
       account: { loggedIn: Boolean(cookieValue()), verified: Boolean(verifiedUid) },
@@ -1153,7 +1409,12 @@ export function createBiliDmService({
         pendingConversations: counters.pendingConversations,
         gapConversations: counters.gapConversations,
       } : {},
-      polling: { seconds: config.pollSeconds, requestBudget: REQUEST_BUDGET },
+      polling: {
+        seconds: config.pollSeconds,
+        effectiveSeconds: policy?.effectiveIntervalSeconds || config.pollSeconds,
+        requestBudget: REQUEST_BUDGET,
+      },
+      requestPolicy: policy,
       noticePending: Boolean(pendingNotice),
       notice: pendingNotice
         ? { code: safeCode(pendingNotice.code), at: Number(pendingNotice.at) || null }

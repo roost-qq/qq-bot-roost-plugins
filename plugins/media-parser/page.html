@@ -6,34 +6,115 @@
 <title>流媒体聚合解析管理</title>
 <style>
 :root{color-scheme:light dark;--bg:#f5f7fa;--card:#fff;--ink:#172536;--muted:#667789;--line:#dce3e9;--accent:#096b64;--danger:#ae3944;--soft:#eaf6f2}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1180px;margin:auto;padding:24px}h1{font-size:25px;line-height:1.3;margin:0 0 6px}h2{font-size:17px;margin:0 0 14px}p{margin:6px 0 14px}.muted,small{color:var(--muted)}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px}.badge{font-size:12px;background:var(--soft);color:var(--accent);padding:5px 10px;border-radius:20px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:18px}.wide{grid-column:1/-1}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}.metric{padding:12px;background:var(--bg);border-radius:8px}.metric strong{display:block;font-size:23px}.metric small{display:block}.row,.actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.actions{margin-top:14px}button,input,select,textarea{font:inherit}button{cursor:pointer;border:1px solid var(--line);border-radius:7px;padding:7px 12px;background:var(--card);color:var(--ink)}button.primary{background:var(--accent);border-color:var(--accent);color:#fff}button.danger{color:var(--danger)}button:disabled{opacity:.5;cursor:wait}input[type=text],input[type=number],input[type=password],select,textarea{width:100%;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;padding:8px}input[type=checkbox]{accent-color:var(--accent);margin-right:8px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px 18px}.fields label{display:block}.fields label>span{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}.toggle{display:flex!important;align-items:center;min-height:30px}.toggle span{display:inline!important;color:var(--ink)!important;font-size:14px!important}.full{grid-column:1/-1}textarea{min-height:150px;resize:vertical;font-family:ui-monospace,Consolas,monospace;font-size:12px}.preview-input{font-family:inherit;font-size:14px;min-height:76px}.notice{border-left:3px solid #d5a44a;background:var(--bg);padding:10px 13px;margin:12px 0;white-space:pre-wrap;overflow-wrap:anywhere}.error{color:var(--danger)}.success{color:var(--accent)}#feedback{position:sticky;top:0;z-index:2;padding:10px 14px;border:1px solid var(--line);background:var(--card);border-radius:8px;margin-bottom:14px;display:none}.platforms{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.platform{display:flex;flex-direction:column;gap:4px}.platform label{font-size:13px}.platform small{font-size:11px}.scroll{overflow:auto}table{border-collapse:collapse;width:100%;font-size:12px}td,th{border-bottom:1px solid var(--line);padding:9px 7px;text-align:left;vertical-align:top}th{color:var(--muted);font-weight:500}td.url{min-width:160px;max-width:360px;overflow-wrap:anywhere}.status-line{white-space:pre-wrap;overflow-wrap:anywhere}pre{max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0;font:12px/1.6 ui-monospace,Consolas,monospace}details{margin-top:12px}summary{cursor:pointer;color:var(--accent)}#preview-result .item{padding:8px 10px;background:var(--bg);border-radius:6px;margin-top:8px;white-space:pre-wrap;overflow-wrap:anywhere}code{font:12px ui-monospace,Consolas,monospace}hr{border:0;border-top:1px solid var(--line);margin:16px 0}
-@media(max-width:850px){.platforms{grid-template-columns:repeat(3,minmax(0,1fr))}.grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}@media(max-width:500px){main{padding:14px}.top{align-items:flex-start}.fields{grid-template-columns:1fr}.platforms{grid-template-columns:repeat(2,minmax(0,1fr))}.card{padding:15px}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1180px;margin:auto;padding:24px}h1{font-size:25px;line-height:1.3;margin:0 0 6px}h2{font-size:17px;margin:0 0 14px}h3{font-size:15px;margin:4px 0 10px}p{margin:6px 0 14px}.muted,small{color:var(--muted)}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px}.badge{font-size:12px;background:var(--soft);color:var(--accent);padding:5px 10px;border-radius:20px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:18px}.wide{grid-column:1/-1}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}.metric{padding:12px;background:var(--bg);border-radius:8px}.metric strong{display:block;font-size:23px}.metric small{display:block}.row,.actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.actions{margin-top:14px}button,input,select,textarea{font:inherit}button{cursor:pointer;border:1px solid var(--line);border-radius:7px;padding:7px 12px;background:var(--card);color:var(--ink)}button.primary{background:var(--accent);border-color:var(--accent);color:#fff}button.danger{color:var(--danger)}button:disabled{opacity:.5;cursor:wait}input[type=text],input[type=number],input[type=password],select,textarea{width:100%;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;padding:8px}input[type=checkbox]{accent-color:var(--accent);margin-right:8px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px 18px}.fields label{display:block}.fields label>span{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}.toggle{display:flex!important;align-items:center;min-height:30px}.toggle span{display:inline!important;color:var(--ink)!important;font-size:14px!important}.full{grid-column:1/-1}textarea{min-height:150px;resize:vertical;font-family:ui-monospace,Consolas,monospace;font-size:12px}.preview-input{font-family:inherit;font-size:14px;min-height:76px}.notice{border-left:3px solid #d5a44a;background:var(--bg);padding:10px 13px;margin:12px 0;white-space:pre-wrap;overflow-wrap:anywhere}.error{color:var(--danger)}.success{color:var(--accent)}#feedback{position:sticky;top:0;z-index:2;padding:10px 14px;border:1px solid var(--line);background:var(--card);border-radius:8px;margin-bottom:14px;display:none}.platforms{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.platform{display:flex;flex-direction:column;gap:4px}.platform label{font-size:13px}.platform small{font-size:11px}.scroll{overflow:auto;max-width:100%}table{border-collapse:collapse;width:100%;font-size:12px}td,th{border-bottom:1px solid var(--line);padding:9px 7px;text-align:left;vertical-align:top}th{color:var(--muted);font-weight:500}td.url{min-width:160px;max-width:360px;overflow-wrap:anywhere}.status-line{white-space:pre-wrap;overflow-wrap:anywhere}pre{max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0;font:12px/1.6 ui-monospace,Consolas,monospace}details{margin-top:12px}summary{cursor:pointer;color:var(--accent)}#preview-result .item{padding:8px 10px;background:var(--bg);border-radius:6px;margin-top:8px;white-space:pre-wrap;overflow-wrap:anywhere}code{font:12px ui-monospace,Consolas,monospace}hr{border:0;border-top:1px solid var(--line);margin:16px 0}[hidden]{display:none!important}
+.section{padding:0;overflow:hidden}
+.section>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 20px;font-size:17px;font-weight:600;color:var(--ink);outline-offset:2px}
+.section>summary::-webkit-details-marker{display:none}
+.section>summary::before{content:'▸';color:var(--accent);font-size:13px;flex:0 0 auto}
+.section[open]>summary::before{content:'▾'}
+.section>summary .summary-title{flex:1 1 auto;min-width:0}
+.section>summary .summary-note{flex:0 1 auto;font-weight:400;font-size:12px;color:var(--muted);text-align:right;overflow-wrap:anywhere}.section>summary .badge{color:var(--accent)}
+.section-body{padding:0 20px 20px}
+.dm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.provider-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0}
+.provider-bar select{max-width:280px}
+#dm-qr img{max-width:100%;width:220px;height:auto}
+.shortcut{white-space:nowrap}
+@media(max-width:850px){.platforms{grid-template-columns:repeat(3,minmax(0,1fr))}.grid,.dm-grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:500px){main{padding:14px}.top{align-items:flex-start;flex-direction:column}.fields,.dm-grid{grid-template-columns:1fr}.platforms{grid-template-columns:repeat(2,minmax(0,1fr))}.card{padding:15px}.section>summary{padding:14px 15px}.section-body{padding:0 15px 16px}.section>summary{flex-wrap:wrap}.section>summary .summary-note{text-align:left}}
 @media(prefers-color-scheme:dark){:root{--bg:#121a23;--card:#192530;--ink:#e3ebf2;--muted:#9db0bf;--line:#304454;--accent:#67d4c1;--danger:#ff95a0;--soft:#193f3b}button.primary{color:#102925}}
 </style>
 </head>
 <body>
 <main>
-  <div class="top"><div><h1>流媒体聚合解析</h1><div class="muted">分享链接 → 本机解析 → 当前会话有序投递</div></div><span class="badge">Roost 原生插件 · v0.2.0</span></div>
+  <div class="top">
+    <div><h1>流媒体聚合解析</h1><div class="muted">分享链接 → 本机解析 → 当前会话有序投递</div></div>
+    <div class="row"><button id="shortcut-access" class="shortcut" type="button">平台接入</button><span class="badge">Roost 原生插件 · v0.4.2</span></div>
+  </div>
   <div id="feedback" role="status"></div>
-  <section class="card">
-    <div class="row"><h2 style="margin:0">引擎与任务</h2><span id="engine-badge" class="badge">读取中</span></div>
-    <div class="metrics">
-      <div class="metric"><strong id="running">—</strong><small>正在解析或发送</small></div>
-      <div class="metric"><strong id="waiting">—</strong><small>等待任务</small></div>
-      <div class="metric"><strong id="platform-count">31</strong><small>平台入口</small></div>
-      <div class="metric"><strong id="cache">—</strong><small>缓存 MiB</small></div>
+
+  <details class="card section" id="engine-section" open>
+    <summary><span class="summary-title">引擎与任务</span><span id="engine-badge" class="badge summary-note">读取中</span></summary>
+    <div class="section-body">
+      <div class="metrics">
+        <div class="metric"><strong id="running">—</strong><small>正在解析或发送</small></div>
+        <div class="metric"><strong id="waiting">—</strong><small>等待任务</small></div>
+        <div class="metric"><strong id="platform-count">31</strong><small>平台入口</small></div>
+        <div class="metric"><strong id="cache">—</strong><small>缓存 MiB</small></div>
+      </div>
+      <div id="engine-detail" class="status-line muted"></div>
+      <div id="restart-notice" class="notice" hidden>配置已保存。等待任务空闲后点击「空闲重启」使引擎设置生效。</div>
+      <div class="actions">
+        <button data-op="prepare" class="primary">准备依赖</button><button data-op="repair">修复依赖</button><button data-op="start">启动</button><button data-op="stop" class="danger">停止</button><button data-op="restart">空闲重启</button><button data-op="clean">清理未占用缓存</button><button id="refresh">刷新</button>
+      </div>
+      <div id="operation-progress" class="muted" style="margin-top:10px"></div>
+      <p class="muted">完整引擎诊断、维护历史和任务表已移至页面底部的「日志与任务记录」，展开后才加载。</p>
     </div>
-    <div id="engine-detail" class="status-line muted"></div>
-    <div id="restart-notice" class="notice" hidden>配置已保存。等待任务空闲后点击「空闲重启」使引擎设置生效。</div>
-    <div class="actions">
-      <button data-op="prepare" class="primary">准备依赖</button><button data-op="repair">修复依赖</button><button data-op="start">启动</button><button data-op="stop" class="danger">停止</button><button data-op="restart">空闲重启</button><button data-op="clean">清理未占用缓存</button><button id="refresh">刷新</button>
+  </details>
+
+  <details class="card section" id="dm-card">
+    <summary id="access-summary"><span class="summary-title">平台接入与私信提醒</span><span id="dm-badge" class="badge summary-note">读取中</span><span id="access-summary-status" class="summary-note">读取中</span></summary>
+    <div class="section-body">
+      <p class="muted">B站私信提醒保留原有扫码、Cookie、接收目标和投递；小黑盒提供原生私信接入，默认关闭，只有你显式保存启用后才会读取。切换平台只改变当前管理视图，不启停监听、不退出登录、不重建基线，也不改变另一个平台。</p>
+      <div class="notice" id="dm-native-note">读取可能影响未读状态，完整分页与恢复待实测。请勿把页面状态当作“全部私信已同步”。</div>
+      <div class="provider-bar">
+        <label for="dm-provider-select"><strong>接入平台</strong></label>
+        <select id="dm-provider-select" aria-label="接入平台"></select>
+        <span id="dm-provider-capability" class="muted"></span>
+      </div>
+      <div id="dm-provider-unavailable" class="notice" hidden></div>
+      <div class="dm-grid">
+        <div>
+          <h3>登录</h3>
+          <div class="row">
+            <button id="dm-login-start" class="primary" type="button">扫码登录</button>
+            <button id="dm-login-cancel" type="button">取消扫码</button>
+            <button id="dm-login-inspect" type="button">检查登录</button>
+            <button id="dm-login-logout" class="danger" type="button">退出登录</button>
+          </div>
+          <div id="dm-login-status" class="status-line muted" style="margin-top:10px">读取中</div>
+          <div id="dm-qr"></div>
+          <form id="dm-manual-form">
+            <label><span>手动 Cookie（保存后清空输入，不回显）</span><input type="password" id="dm-manual-cookie" autocomplete="new-password" spellcheck="false" placeholder="粘贴后保存，不会在页面再次显示"></label>
+            <div class="actions"><button id="dm-manual-save" class="primary" type="submit">保存 Cookie</button><small>仅保存到当前平台凭据；不会自动启用提醒。</small></div>
+          </form>
+        </div>
+        <div>
+          <h3>提醒与接收</h3>
+          <form id="dm-config-form"><div class="fields">
+            <label class="toggle"><input type="checkbox" name="enabled" id="dm-enabled"><span>启用私信提醒</span></label>
+            <label><span>轮询间隔秒（180–3600）</span><input type="number" name="pollSeconds" id="dm-poll-seconds" min="180" max="3600" step="30"></label>
+            <label class="toggle" id="dm-system-field"><input type="checkbox" name="includeSystem" id="dm-include-system"><span>纳入已支持的系统私信</span></label>
+          </div><div class="actions"><button id="dm-config-save" class="primary" type="submit">保存私信设置</button><button id="dm-check" type="button">立即检查</button><button id="dm-test" type="button">发送测试通知</button></div></form>
+          <div id="dm-effective" class="status-line muted" style="margin-top:12px">读取中</div>
+          <div id="dm-target-panel" class="notice" style="margin-top:14px">
+            <label class="toggle"><input type="checkbox" id="dm-send-to-group"><span>发送到群</span></label>
+            <p class="muted">勾选后，之后的自动私信提醒只发送到所选群，不再重复发送到主人私聊；主人绑定和管理命令仍保留在 QQ 私聊。群目标按当前平台单独保存。</p>
+            <div class="row">
+              <select id="dm-group-select" disabled><option value="">先勾选“发送到群”</option></select>
+              <button id="dm-groups-refresh" type="button">刷新群列表</button>
+              <button id="dm-target-save" class="primary" type="button">保存接收目标</button>
+            </div>
+            <p id="dm-group-hint" class="muted">群列表来自机器人最近识别的群，未出现请在目标群发一条消息后刷新。</p>
+            <p id="dm-target-status" class="muted"></p>
+          </div>
+          <div id="dm-status" class="muted" style="margin-top:12px">读取中</div>
+          <div id="dm-migration" class="muted"></div>
+          <details id="dm-acceptance" hidden>
+            <summary>验收记录</summary>
+            <p class="muted">只读本机脱敏事件；不显示私信正文、完整 ID、凭据或 URL，也不会自动发送或请求上游。展开或手动刷新才会读取本地 GET。</p>
+            <div class="actions"><button id="dm-acceptance-refresh" type="button">刷新验收记录</button><span id="dm-acceptance-status" class="muted">未加载</span></div>
+            <div class="scroll"><table><thead><tr><th>阶段</th><th>时间</th><th>码</th><th>计数</th></tr></thead><tbody id="dm-acceptance-events"></tbody></table></div>
+          </details>
+          <p class="muted">绑定接收目标请在机器人主人 QQ 私聊发送 <code>/解析 私信 绑定</code>。页面授权是维护权限，不等于主人身份；页面不能读取私信正文；群目标只能从宿主已识别且启用的群中选择。</p>
+        </div>
+      </div>
     </div>
-    <div id="operations" class="muted" style="margin-top:10px"></div>
-    <details><summary>完整引擎诊断</summary><pre id="diagnostics"></pre></details>
-  </section>
-  <div class="grid">
-    <section class="card">
-      <h2>触发与投递</h2>
+  </details>
+
+  <details class="card section" id="settings-section" open>
+    <summary><span class="summary-title">触发与投递</span><span class="summary-note">自动解析、预算与去重</span></summary>
+    <div class="section-body">
       <form id="settings-form"><div class="fields">
         <label class="toggle"><input type="checkbox" name="enabled"><span>启用自动解析</span></label>
         <label class="toggle"><input type="checkbox" name="privateEnabled"><span>允许私聊解析</span></label>
@@ -51,9 +132,12 @@
         <label><span>缓存保留秒</span><input type="number" name="cacheSeconds" min="60" max="86400"></label>
       </div><div class="actions"><button class="primary" type="submit">保存设置</button></div></form>
       <p class="muted" style="margin-top:12px">多个链接共享总预算。有效文件上限还受通道限制；长音频完整保留为文件，语音依赖缺失时自动降级。</p>
-    </section>
-    <section class="card">
-      <h2>本机引擎设置</h2>
+    </div>
+  </details>
+
+  <details class="card section" id="engine-settings-section" open>
+    <summary><span class="summary-title">本机引擎设置</span><span class="summary-note">托管模式、路径与翻译</span></summary>
+    <div class="section-body">
       <form id="engine-form"><div class="fields">
         <label><span>引擎模式</span><select name="engineMode"><option value="managed">托管：独立 Python 环境</option><option value="external">外部：同机引擎</option></select></label>
         <label><span>本机回环地址与端口</span><input type="text" name="engineUrl" required></label>
@@ -64,79 +148,64 @@
         <label class="toggle"><input type="checkbox" name="translation"><span>翻译：允许调用所配模型</span></label>
       </div><div class="actions"><button class="primary" type="submit">保存引擎设置</button></div></form>
       <div class="notice">首次准备会校验源码、创建独立环境并安装声明依赖；进度与错误如实显示。多机器人需使用不同端口。外部模式仅支持同机缓存文件。</div>
-      <h2 style="margin-top:20px">真实解析预览</h2>
+    </div>
+  </details>
+
+  <details class="card section" id="preview-section">
+    <summary><span class="summary-title">真实解析预览</span><span class="summary-note">不会向真实聊天发消息</span></summary>
+    <div class="section-body">
       <form id="preview-form"><textarea class="preview-input" id="preview-text" placeholder="粘贴一个或多个受支持分享链接" required></textarea><div class="actions"><button class="primary" type="submit">解析并预览</button><small>不会向真实聊天发消息</small></div></form>
       <div id="preview-result"></div>
-    </section>
-    <section class="card wide">
-      <div class="row" style="justify-content:space-between"><h2>平台输出模式</h2><button id="save-platforms" class="primary">保存平台设置</button></div>
-      <p class="muted">31 个解析入口均已保留。这里显示配置与验证状态；实时可用性受登录态、地区与平台接口影响。修改后空闲重启生效。</p>
-      <div id="platforms" class="platforms"></div>
-    </section>
-    <section class="card wide">
-      <div class="row" style="justify-content:space-between"><h2>任务记录</h2><div class="row"><button id="prev-page">上一页</button><span id="pagination" class="muted"></span><button id="next-page">下一页</button></div></div>
-      <div class="scroll"><table><thead><tr><th>时间</th><th>平台及来源</th><th>状态</th><th>发送数量</th><th>待确认 / 失败 / 跳过</th><th>原因</th></tr></thead><tbody id="task-rows"></tbody></table></div>
-      <p class="muted" style="margin-top:12px">最多保留 200 条记录，不持久化解析正文。待确认表示投递结果尚未确认，不会整份重发。</p>
-    </section>
-    <section class="card wide" id="dm-card">
-      <div class="row" style="justify-content:space-between"><h2>B站私信提醒</h2><span id="dm-badge" class="badge">默认关闭</span></div>
-      <p class="muted">私信提醒默认关闭。登录使用共享 B 站凭据；登录成功不会自动启用提醒，也不会自动开启 Cookie 增强解析。接收目标只能在机器人主人 QQ 私聊中绑定。</p>
-      <div class="grid">
-        <div>
-          <h3>登录</h3>
-          <div class="row">
-            <button id="dm-login-start" class="primary" type="button">扫码登录</button>
-            <button id="dm-login-cancel" type="button">取消扫码</button>
-            <button id="dm-login-inspect" type="button">检查登录</button>
-            <button id="dm-login-logout" class="danger" type="button">退出登录</button>
-          </div>
-          <div id="dm-login-status" class="status-line muted" style="margin-top:10px">读取中</div>
-          <div id="dm-qr"></div>
-          <form id="dm-manual-form">
-            <label><span>手动 Cookie（保存后清空输入，不回显）</span><input type="password" id="dm-manual-cookie" autocomplete="new-password" spellcheck="false" placeholder="粘贴后保存，不会在页面再次显示"></label>
-            <div class="actions"><button class="primary" type="submit">保存 Cookie</button><small>仅保存到共享凭据文件；不会自动启用提醒。</small></div>
-          </form>
-        </div>
-        <div>
-          <h3>提醒与接收</h3>
-          <form id="dm-config-form"><div class="fields">
-            <label class="toggle"><input type="checkbox" name="biliDmEnabled"><span>启用私信提醒</span></label>
-            <label><span>轮询间隔秒（60–1800）</span><input type="number" name="biliDmPollSeconds" min="60" max="1800"></label>
-            <label class="toggle"><input type="checkbox" name="biliDmIncludeSystem"><span>纳入已支持的系统私信</span></label>
-          </div><div class="actions"><button class="primary" type="submit">保存私信设置</button><button id="dm-check" type="button">立即检查</button><button id="dm-test" type="button">发送测试通知</button></div></form>
-          <div id="dm-target-panel" class="notice" style="margin-top:14px">
-            <label class="toggle"><input type="checkbox" id="dm-send-to-group"><span>发送到群</span></label>
-            <p class="muted">勾选后，之后的自动私信提醒只发送到所选群，不再重复发送到主人私聊；主人绑定和管理命令仍保留在 QQ 私聊。</p>
-            <div class="row">
-              <select id="dm-group-select" disabled><option value="">先勾选“发送到群”</option></select>
-              <button id="dm-groups-refresh" type="button">刷新群列表</button>
-              <button id="dm-target-save" class="primary" type="button">保存接收目标</button>
-            </div>
-            <p id="dm-group-hint" class="muted">群列表来自机器人最近识别的群，未出现请在目标群发一条消息后刷新。</p>
-            <p id="dm-target-status" class="muted"></p>
-          </div>
-          <div id="dm-status" class="muted" style="margin-top:12px">读取中</div>
-          <p class="muted">绑定接收目标请在机器人主人 QQ 私聊发送 <code>/解析 私信 绑定</code>。页面授权是维护权限，不等于主人身份；页面不能读取私信正文；群目标只能从宿主已识别且启用的群中选择。</p>
-        </div>
-      </div>
-    </section>
-    <section class="card">
-      <h2>高级引擎参数</h2>
-      <p class="muted">保留原引擎字段，支持文案显示、文本转图片、代理与平台参数。翻译开关使用 <code>translation.enable</code>，由上方翻译开关控制。凭据会转入单独的凭据文件。</p>
+    </div>
+  </details>
+
+  <details class="card section" id="advanced-section">
+    <summary><span class="summary-title">高级引擎参数</span><span class="summary-note">原引擎 JSON 字段</span></summary>
+    <div class="section-body">
+      <p class="muted">保留原引擎字段，支持文案显示、文本转图片、代理与平台参数。翻译开关使用 <code>translation.enable</code>，由本机引擎设置中的翻译开关控制。凭据会转入单独的凭据文件。</p>
       <form id="advanced-form"><textarea id="advanced" spellcheck="false" aria-label="高级引擎 JSON 配置"></textarea><div class="actions"><button class="primary" type="submit">保存高级配置</button></div></form>
-    </section>
-    <section class="card">
-      <h2>平台与翻译凭据</h2>
+    </div>
+  </details>
+
+  <details class="card section" id="credentials-section">
+    <summary><span class="summary-title">平台与翻译凭据</span><span class="summary-note">遮罩显示，留空保留</span></summary>
+    <div class="section-body">
       <p class="muted">已保存内容仅显示遮罩。留空保留原值，勾选「清除」后保存可删除对应值。配置保存后空闲重启生效。</p>
       <form id="credentials-form"><div id="credentials-fields" class="fields"></div><div class="actions"><button class="primary" type="submit">保存凭据</button></div></form>
       <details><summary>其他凭据 JSON</summary><p class="muted">只接受命名的 cookie、token、api_key 等凭据字段；空对象不改动已有值。</p><textarea id="extra-credentials" spellcheck="false" aria-label="其他凭据 JSON">{}</textarea></details>
-    </section>
-    <section class="card wide">
-      <h2>宿主接入边界</h2><div id="boundaries"></div>
+    </div>
+  </details>
+
+  <details class="card section" id="boundaries-section">
+    <summary><span class="summary-title">宿主接入边界</span><span class="summary-note">回复判定与授权说明</span></summary>
+    <div class="section-body">
+      <div id="boundaries"></div>
       <details><summary>供 reply-judge 使用的链接放行规则</summary><p class="muted">将此规则加入该插件已有 bypassRegex；本插件不会修改其他插件。</p><textarea id="bypass" readonly aria-label="reply-judge 放行正则"></textarea></details>
       <details><summary>管理页授权说明</summary><p id="auth-boundary" class="muted"></p></details>
-    </section>
-  </div>
+    </div>
+  </details>
+
+  <details class="card section" id="platforms-section">
+    <summary><span class="summary-title">平台输出模式</span><span class="summary-note">展开后加载，修改需空闲重启</span></summary>
+    <div class="section-body">
+      <div class="row" style="justify-content:space-between"><p class="muted" style="margin:0">31 个解析入口均已保留。这里显示配置与验证状态；实时可用性受登录态、地区与平台接口影响。</p><button id="save-platforms" class="primary">保存平台设置</button></div>
+      <div id="platforms" class="platforms"></div>
+    </div>
+  </details>
+
+  <details class="card section" id="logs-section">
+    <summary><span class="summary-title">日志与任务记录</span><span class="summary-note" id="logs-note">展开后加载</span></summary>
+    <div class="section-body">
+      <h3>维护操作与历史</h3>
+      <div id="operations" class="status-line muted">展开后显示最近维护操作。</div>
+      <h3>完整引擎诊断</h3>
+      <pre id="diagnostics"></pre>
+      <h3>任务记录</h3>
+      <div class="row" style="justify-content:space-between"><div class="row"><button id="prev-page">上一页</button><span id="pagination" class="muted"></span><button id="next-page">下一页</button></div><button id="tasks-refresh" type="button">刷新任务</button></div>
+      <div class="scroll"><table><thead><tr><th>时间</th><th>平台及来源</th><th>状态</th><th>发送数量</th><th>待确认 / 失败 / 跳过</th><th>原因</th></tr></thead><tbody id="task-rows"></tbody></table></div>
+      <p class="muted" style="margin-top:12px">最多保留 200 条记录，不持久化解析正文。待确认表示投递结果尚未确认，不会整份重发。此区只整合现有诊断、操作和任务记录，不读取任意路径日志文件。</p>
+    </div>
+  </details>
 </main>
 <script>
 'use strict';
@@ -144,14 +213,46 @@ const apiBase = '/api/plugins/media-parser/r';
 const token = new URLSearchParams(location.search).get('pt') || '';
 const bot = new URLSearchParams(location.search).get('bot') || '';
 const $ = (id) => document.getElementById(id);
+const PROVIDER_IDS = ['bilibili', 'xiaoheihe'];
+const PROVIDER_FALLBACKS = {
+  bilibili: {
+    id: 'bilibili', label: 'B站', enabled: false, status: 'disabled', statusText: '未启用',
+    capabilities: { supportsPrivateMessages: true, supportsQrLogin: true, supportsManualLogin: true, verified: true, available: true, transport: 'poll' }
+  },
+  xiaoheihe: {
+    id: 'xiaoheihe', label: '小黑盒', enabled: false, status: 'unavailable', statusText: '未启用',
+    capabilities: { supportsPrivateMessages: true, supportsQrLogin: true, supportsManualLogin: true, verified: true, available: true, transport: 'poll' }
+  }
+};
+let providerList = PROVIDER_IDS.map((id) => cloneProvider(PROVIDER_FALLBACKS[id]));
+let providerSignature = '';
+let selectedProviderId = readPreferredProvider();
+let viewGeneration = 0;
+let accountRevision = 0;
+let formProvider = null;
 let currentPage = 1;
 let totalPages = 1;
 let configLoaded = false;
 let refreshing = false;
 let operationTimer = null;
 let qrTimer = null;
-let dmTimer = null;
+let qrProviderId = null;
+let accessTimer = null;
+let aggregateTimer = null;
+let engineTimer = null;
 let dmGroups = [];
+let lastStatus = null;
+let lastProviderStatus = null;
+let platformsLoaded = false;
+let logsLoaded = false;
+let migrationNotice = '';
+let readSequence = 0;
+let actionSequence = 0;
+const latestReadSequence = new Map();
+const latestActionSequence = new Map();
+const currentActionEpoch = new Map();
+const serverAccountVersion = new Map();
+const actionOwners = new Map();
 const credentialKeys = [
   ['engineToken','外部模式引擎认证 Token'],
   ['bilibili_enhanced.cookie','哔哩哔哩 Cookie'],
@@ -159,6 +260,48 @@ const credentialKeys = [
   ['pixiv.cookie','Pixiv Cookie'],
   ['translation.llm.custom_provider.api_key','翻译 API Key']
 ];
+const loginStateLabels = {
+  idle: '未开始', starting: '生成中', waiting: '等待扫码', scanned: '已扫码待确认',
+  success: '已登录', expired: '已过期', cancelled: '已取消', error: '错误',
+  missing: '未登录', valid: '有效', invalid: '已失效', unavailable: '不可用'
+};
+const dmStateLabels = {
+  disabled: '已停用', waiting_login: '等待登录', waiting_owner: '等待绑定',
+  initializing: '初始化中', watching: '监听中', watching_limited: '监听中（范围受限）',
+  catching_up: '追赶中', backoff: '退避中', paused_capacity: '容量暂停',
+  paused: '安全暂停', unavailable: '不可用', error: '错误'
+};
+function cloneProvider(provider) {
+  const caps = provider && provider.capabilities ? provider.capabilities : {};
+  return {
+    id: provider.id, label: provider.label, enabled: provider.enabled === true,
+    status: provider.status || 'disabled', statusText: provider.statusText || '未启用',
+    paused: provider.paused === true,
+    capabilities: {
+      supportsPrivateMessages: caps.supportsPrivateMessages === true,
+      supportsQrLogin: caps.supportsQrLogin === true,
+      supportsManualLogin: caps.supportsManualLogin === true,
+      verified: caps.verified === true,
+      available: caps.available === true,
+      transport: typeof caps.transport === 'string' ? caps.transport : 'unavailable'
+    }
+  };
+}
+function storageKeyForBot() {
+  return 'media-parser.dmProvider.' + (bot || 'default');
+}
+function readPreferredProvider() {
+  try {
+    const value = window.localStorage.getItem(storageKeyForBot());
+    return PROVIDER_IDS.includes(value) ? value : 'bilibili';
+  } catch { return 'bilibili'; }
+}
+function savePreferredProvider(providerId) {
+  if (!PROVIDER_IDS.includes(providerId)) return;
+  try {
+    window.localStorage.setItem(storageKeyForBot(), providerId);
+  } catch { /* preference is optional */ }
+}
 function element(tag, text, className) {
   const node = document.createElement(tag);
   if (text !== undefined) node.textContent = text;
@@ -181,78 +324,536 @@ async function api(url, method, body) {
     headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   });
-  const data = response.status === 204 ? {} : await response.json();
-  if (!response.ok) throw new Error(data.error || '请求失败（' + response.status + '）');
+  let data = {};
+  if (response.status !== 204) {
+    try { data = await response.json(); } catch { data = {}; }
+  }
+  if (!response.ok) {
+    const error = new Error(data.error || '请求失败（' + response.status + '）');
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
-const loginStateLabels = {
-  idle: '未开始', starting: '生成中', waiting: '等待扫码', scanned: '已扫码待确认',
-  success: '已登录', expired: '已过期', cancelled: '已取消', error: '错误',
-  missing: '未登录', valid: '有效', invalid: '已失效', unavailable: '不可用'
-};
-const dmStateLabels = {
-  disabled: '已停用', waiting_login: '等待登录', waiting_owner: '等待绑定',
-  initializing: '初始化中', watching: '监听中', catching_up: '追赶中',
-  backoff: '退避中', paused_capacity: '容量暂停', error: '错误', unavailable: '不可用'
-};
+function providerInfo(providerId) {
+  return providerList.find((provider) => provider.id === providerId) || cloneProvider(PROVIDER_FALLBACKS[providerId] || PROVIDER_FALLBACKS.bilibili);
+}
+function supportsPrivate(providerId) {
+  const caps = providerInfo(providerId).capabilities;
+  return caps.supportsPrivateMessages === true && caps.available !== false;
+}
+function unavailableReason(providerId) {
+  const info = providerInfo(providerId);
+  if (supportsPrivate(providerId)) return '';
+  if (info.id === 'xiaoheihe') {
+    return '小黑盒原生模块尚未就绪；页面不会伪造成功，也不会自动请求上游。';
+  }
+  return '该平台的私信能力当前不可用。';
+}
+function safeServerVersion(status) {
+  const source = status && typeof status === 'object' ? status : {};
+  const values = [
+    source.accountVersion,
+    source.sessionVersion,
+    source.account && source.account.version,
+    source.login && source.login.sessionVersion
+  ];
+  let version = 0;
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > version) version = Math.floor(n);
+  }
+  return version;
+}
+function isOlderServerVersion(providerId, version) {
+  const known = serverAccountVersion.get(providerId) || 0;
+  return Number.isFinite(version) && version > 0 && known > 0 && version < known;
+}
+function noteServerVersion(providerId, version) {
+  if (!Number.isFinite(version) || version <= 0) return false;
+  const known = serverAccountVersion.get(providerId) || 0;
+  if (version <= known) return false;
+  serverAccountVersion.set(providerId, Math.floor(version));
+  currentActionEpoch.set(providerId, (currentActionEpoch.get(providerId) || 0) + 1);
+  return true;
+}
+function captureView(providerId, kind) {
+  const provider = providerId || selectedProviderId;
+  const readKind = kind || 'status';
+  const capture = {
+    providerId: provider,
+    kind: readKind,
+    generation: viewGeneration,
+    revision: accountRevision,
+    actionEpoch: currentActionEpoch.get(provider) || 0,
+    actionSeq: latestActionSequence.get(provider) || 0,
+    readSeq: 0,
+    serverVersion: serverAccountVersion.get(provider) || 0
+  };
+  if (readKind !== 'action') {
+    capture.readSeq = ++readSequence;
+    latestReadSequence.set(provider + ':' + readKind, capture.readSeq);
+  }
+  return capture;
+}
+function beginAction(providerId) {
+  const provider = providerId || selectedProviderId;
+  const actionSeq = ++actionSequence;
+  latestActionSequence.set(provider, actionSeq);
+  currentActionEpoch.set(provider, (currentActionEpoch.get(provider) || 0) + 1);
+  return {
+    providerId: provider,
+    kind: 'action',
+    generation: viewGeneration,
+    revision: accountRevision,
+    actionEpoch: currentActionEpoch.get(provider),
+    actionSeq,
+    readSeq: 0,
+    serverVersion: serverAccountVersion.get(provider) || 0
+  };
+}
+function viewStale(capture) {
+  if (!capture || capture.providerId !== selectedProviderId ||
+    capture.generation !== viewGeneration || capture.revision !== accountRevision) return true;
+  if ((capture.serverVersion || 0) < (serverAccountVersion.get(capture.providerId) || 0)) return true;
+  if (capture.kind === 'action') {
+    return capture.actionSeq !== (latestActionSequence.get(capture.providerId) || 0);
+  }
+  return false;
+}
+function readStale(capture) {
+  if (viewStale(capture)) return true;
+  if (capture.actionEpoch !== (currentActionEpoch.get(capture.providerId) || 0)) return true;
+  return capture.readSeq !== (latestReadSequence.get(capture.providerId + ':' + capture.kind) || 0);
+}
 function timeText(value) {
   return Number.isFinite(value) && value > 0 ? new Date(value).toLocaleString() : '—';
 }
-function showQr(dataUrl) {
+function textValue(value) {
+  return typeof value === 'string' ? value : '';
+}
+function numberValue(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+function providerPath(providerId, suffix) {
+  return '/dm/providers/' + encodeURIComponent(providerId) + suffix;
+}
+async function providerRequest(providerId, options) {
+  const path = providerPath(providerId, options.suffix);
+  try {
+    return await api(path, options.method, options.body);
+  } catch (error) {
+    const fallback = options.fallback;
+    if (!fallback || providerId !== 'bilibili' || ![404, 405].includes(error.status)) throw error;
+    const fallbackBody = typeof fallback.body === 'function' ? fallback.body(options.body) : options.body;
+    return api(fallback.path, fallback.method || options.method, fallbackBody);
+  }
+}
+function normalizeProvider(raw, providerId) {
+  const fallback = PROVIDER_FALLBACKS[providerId];
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const capsSource = source.capabilities && typeof source.capabilities === 'object' ? source.capabilities : null;
+  const caps = { ...fallback.capabilities, ...(capsSource || {}) };
+  return {
+    id: providerId,
+    label: typeof source.label === 'string' && source.label ? source.label : fallback.label,
+    enabled: source.enabled === true,
+    status: typeof source.status === 'string' ? source.status : fallback.status,
+    statusText: typeof source.statusText === 'string' ? source.statusText : fallback.statusText,
+    paused: source.paused === true,
+    capabilities: {
+      supportsPrivateMessages: caps.supportsPrivateMessages === true,
+      supportsQrLogin: caps.supportsQrLogin === true,
+      supportsManualLogin: caps.supportsManualLogin === true,
+      verified: caps.verified === true,
+      available: caps.available === true,
+      transport: typeof caps.transport === 'string' ? caps.transport : fallback.capabilities.transport
+    }
+  };
+}
+function normalizeProviderStatus(raw, providerId) {
+  if (!raw || typeof raw !== 'object') return null;
+  const base = { ...raw };
+  const fallback = PROVIDER_FALLBACKS[providerId];
+  if (!base.provider || typeof base.provider !== 'object') {
+    base.provider = { id: providerId, label: fallback.label, capabilities: fallback.capabilities };
+  }
+  if (!base.config || typeof base.config !== 'object') {
+    base.config = {
+      enabled: base.enabled === true,
+      pollSeconds: base.pollSeconds,
+      includeSystem: base.includeSystem,
+      effectivePollSeconds: base.polling && (base.polling.effectiveIntervalSeconds || base.polling.seconds)
+    };
+  }
+  if (!base.login || typeof base.login !== 'object') base.login = { state: 'unavailable' };
+  return base;
+}
+function normalizeProviderConfig(raw, providerId) {
+  const fallback = PROVIDER_FALLBACKS[providerId];
+  if (!raw || typeof raw !== 'object') {
+    return { enabled: false, pollSeconds: 300, includeSystem: false, effectivePollSeconds: 300 };
+  }
+  return {
+    enabled: raw.enabled === true,
+    pollSeconds: numberValue(raw.pollSeconds) || 300,
+    includeSystem: raw.includeSystem === true,
+    effectivePollSeconds: numberValue(raw.effectivePollSeconds) || numberValue(raw.pollSeconds) || 300
+  };
+}
+function clearAcceptance() {
+  const rows = $('dm-acceptance-events');
+  if (rows) rows.replaceChildren();
+  const status = $('dm-acceptance-status');
+  if (status) status.textContent = '未加载';
+}
+function syncAcceptanceVisibility() {
+  const box = $('dm-acceptance');
+  if (!box) return;
+  const show = selectedProviderId === 'xiaoheihe';
+  box.hidden = !show;
+  if (!show) {
+    box.open = false;
+    clearAcceptance();
+  }
+}
+function acceptanceTime(value) {
+  return Number.isFinite(value) && value > 0 ? new Date(value).toLocaleString() : '—';
+}
+function acceptanceCode(event) {
+  const parts = [textValue(event.errorCode), event.httpStatus ? 'HTTP ' + event.httpStatus : '',
+    event.apiCode ? 'API ' + event.apiCode : '', textValue(event.knownBusinessStatus)].filter(Boolean);
+  return parts.join(' · ') || '—';
+}
+function acceptanceCounts(event) {
+  const counts = event && event.counts && typeof event.counts === 'object' ? event.counts : {};
+  const parts = Object.entries(counts).slice(0, 6).map(([key, value]) => key + '=' + value);
+  if (event && event.attempts) parts.push('attempts=' + event.attempts);
+  return parts.join(' · ') || '—';
+}
+function renderAcceptance(data, providerId, capture) {
+  if (readStale(capture) || providerId !== selectedProviderId) return null;
+  const rows = $('dm-acceptance-events');
+  if (!rows) return null;
+  rows.replaceChildren();
+  const events = data && Array.isArray(data.events) ? data.events : [];
+  for (const event of events.slice(0, 100)) {
+    if (!event || typeof event !== 'object') continue;
+    const tr = element('tr');
+    const phase = [textValue(event.event), textValue(event.phase), textValue(event.action)]
+      .filter(Boolean).join(' / ') || '—';
+    tr.append(element('td', phase));
+    tr.append(element('td', acceptanceTime(Number(event.serverTime) || Number(event.at))));
+    tr.append(element('td', acceptanceCode(event)));
+    tr.append(element('td', acceptanceCounts(event)));
+    rows.append(tr);
+  }
+  $('dm-acceptance-status').textContent = events.length
+    ? '共 ' + events.length + ' 条' + (data.truncated === true || data.limited === true ? '（有限/可能被截断）' : '')
+    : '暂无验收事件';
+  return data;
+}
+async function loadAcceptance(providerId, capture) {
+  const provider = providerId || selectedProviderId;
+  if (provider !== selectedProviderId || provider !== 'xiaoheihe') return null;
+  const lock = capture || captureView(provider, 'acceptance');
+  try {
+    const data = await providerRequest(provider, {
+      method: 'GET', suffix: '/acceptance?limit=50'
+    });
+    if (readStale(lock)) return null;
+    return renderAcceptance(data, provider, lock);
+  } catch (error) {
+    if (!readStale(lock)) {
+      $('dm-acceptance-status').textContent = '验收记录读取失败：' + error.message;
+      $('dm-acceptance-events').replaceChildren();
+    }
+    return null;
+  }
+}
+function renderProviderOptions() {
+  const select = $('dm-provider-select');
+  if (!select) return;
+  const signature = providerList.map((provider) => provider.id + ':' + provider.label).join('|');
+  if (signature !== providerSignature) {
+    providerSignature = signature;
+    select.replaceChildren();
+    for (const provider of providerList) {
+      const option = element('option', provider.label);
+      option.value = provider.id;
+      select.append(option);
+    }
+  }
+  select.value = selectedProviderId;
+  renderProviderChrome();
+}
+function setActionDisabled(node, forbidden) {
+  if (!node) return;
+  node.disabled = forbidden === true || actionOwners.has(node);
+}
+function syncSystemMessageField(providerId) {
+  const supported = providerId === 'bilibili';
+  const field = $('dm-system-field');
+  const input = $('dm-include-system');
+  if (field) field.hidden = !supported;
+  if (input) input.disabled = !supported || actionOwners.has(input);
+  return supported;
+}
+function applyControlState() {
+  const caps = providerInfo(selectedProviderId).capabilities;
+  const privateOk = supportsPrivate(selectedProviderId);
+  setActionDisabled($('dm-enabled'), !privateOk);
+  setActionDisabled($('dm-check'), !privateOk);
+  setActionDisabled($('dm-test'), !privateOk);
+  setActionDisabled($('dm-login-start'), !(privateOk && caps.supportsQrLogin));
+  setActionDisabled($('dm-login-cancel'), !(privateOk && caps.supportsQrLogin));
+  setActionDisabled($('dm-login-inspect'), !privateOk);
+  setActionDisabled($('dm-login-logout'), !(privateOk && (caps.supportsManualLogin || caps.supportsQrLogin)));
+  setActionDisabled($('dm-manual-cookie'), !(privateOk && caps.supportsManualLogin));
+  setActionDisabled($('dm-manual-save'), !(privateOk && caps.supportsManualLogin));
+  setActionDisabled($('dm-config-save'), !privateOk);
+  setActionDisabled($('dm-groups-refresh'), !privateOk);
+  setActionDisabled($('dm-target-save'), !privateOk);
+  setActionDisabled($('dm-send-to-group'), !privateOk);
+  syncSystemMessageField(selectedProviderId);
+  updateGroupControls();
+}
+function renderProviderChrome() {
+  const info = providerInfo(selectedProviderId);
+  const caps = info.capabilities;
+  const reason = unavailableReason(selectedProviderId);
+  const privateOk = supportsPrivate(selectedProviderId);
+  const capabilityText = privateOk
+    ? (caps.verified ? '私信能力已验证' : '私信能力未就绪')
+    : '私信能力不可用';
+  $('dm-provider-capability').textContent = info.label + ' · ' + capabilityText;
+  syncAcceptanceVisibility();
+  const unavailable = $('dm-provider-unavailable');
+  unavailable.hidden = !reason;
+  unavailable.textContent = reason;
+  applyControlState();
+  updateAccessSummary();
+}
+function updateAccessSummary() {
+  const current = providerInfo(selectedProviderId);
+  const parts = providerList.map((provider) => {
+    if (provider.enabled) return provider.label + (provider.paused ? '冷却中' : '监听中');
+    if (provider.statusText) return provider.label + provider.statusText;
+    return provider.label + '未启用';
+  });
+  $('access-summary-status').textContent = parts.join('｜');
+  $('dm-badge').textContent = current.label + ' · ' +
+    (current.enabled ? (current.paused ? '冷却中' : '已启用') : (current.statusText || '未启用'));
+}
+function showQr(dataUrl, providerLabel) {
   const box = $('dm-qr');
   box.replaceChildren();
   if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,')) return;
   const image = element('img');
-  image.alt = 'B 站登录二维码';
+  image.alt = (providerLabel || '平台') + ' 登录二维码';
   image.src = dataUrl;
   image.style.maxWidth = '220px';
   image.style.display = 'block';
   image.style.marginTop = '10px';
   box.append(image);
 }
-function renderLogin(data) {
-  const login = data || {};
+function clearQrTimer() {
+  clearInterval(qrTimer);
+  qrTimer = null;
+  qrProviderId = null;
+}
+function ensureQrTimer(providerId) {
+  if (document.hidden || !isSectionOpen('dm-card')) { clearQrTimer(); return; }
+  if (qrTimer && qrProviderId === providerId) return;
+  clearQrTimer();
+  qrProviderId = providerId;
+  qrTimer = setInterval(() => {
+    if (qrProviderId !== providerId) return;
+    if (document.hidden || !isSectionOpen('dm-card')) { clearQrTimer(); return; }
+    loadLoginStatus(providerId, captureView(providerId, 'login')).catch(() => {});
+  }, 5000);
+}
+function loginExpiryText(state, expiresAt) {
+  if (!Number.isFinite(expiresAt) || expiresAt <= 0) return '';
+  const time = new Date(expiresAt).toLocaleTimeString();
+  if (state === 'valid') return ' · 本次登录校验缓存至 ' + time;
+  if (['starting', 'waiting', 'scanned'].includes(state)) return ' · 二维码有效期至 ' + time;
+  return '';
+}
+function loginRetryWaitText(login) {
+  const ms = Number(login && login.retryAfterMs);
+  if (!Number.isFinite(ms) || ms <= 0) return '';
+  if (login.errorCode !== 'XHH_COOLDOWN' && login.errorCode !== 'XHH_BUDGET') return '';
+  const seconds = Math.max(1, Math.round(Math.min(ms, 86_400_000) / 1000));
+  return ' · 剩余等待约 ' + seconds + ' 秒';
+}
+function renderLogin(payload, providerId, capture) {
+  if (viewStale(capture)) return;
+  const login = payload && payload.login && typeof payload.login === 'object' ? payload.login : payload;
+  if (!login || typeof login !== 'object') return;
+  const info = providerInfo(providerId);
   const state = loginStateLabels[login.state] || '不可用';
-  const expiry = Number.isFinite(login.expiresAt) ? ' · 有效期至 ' + new Date(login.expiresAt).toLocaleTimeString() : '';
-  const error = login.errorSummary ? ' · ' + login.errorSummary : '';
-  $('dm-login-status').textContent = '登录：' + state + expiry + error;
-  showQr(login.pngDataUrl);
-  const active = ['starting', 'waiting', 'scanned'].includes(login.state);
-  if (active && !qrTimer) qrTimer = setInterval(() => { loadLoginStatus().catch(() => {}); }, 3000);
-  if (!active && qrTimer) { clearInterval(qrTimer); qrTimer = null; }
+  const expiry = loginExpiryText(login.state, login.expiresAt);
+  const wait = loginRetryWaitText(login);
+  const error = textValue(login.errorSummary) ? ' · ' + login.errorSummary : '';
+  $('dm-login-status').textContent = '登录：' + state + expiry + wait + error;
+  if (typeof login.pngDataUrl === 'string' && login.pngDataUrl) showQr(login.pngDataUrl, info.label);
+  else if (['success', 'expired', 'cancelled', 'error', 'missing', 'invalid', 'idle', 'unavailable'].includes(login.state)) showQr(null);
+  const active = ['starting', 'waiting', 'scanned'].includes(login.state) && info.capabilities.supportsQrLogin;
+  if (active) ensureQrTimer(providerId);
+  else clearQrTimer();
 }
-function renderDm(data) {
-  const dm = data || {};
-  $('dm-badge').textContent = dm.enabled ? '提醒已启用' : '默认关闭';
-  const binding = dm.binding && dm.binding.bound ? '已绑定 ' + dm.binding.mask : '未绑定';
+function fillDmForm(config, providerId) {
+  $('dm-config-form').elements.enabled.checked = config.enabled === true;
+  $('dm-config-form').elements.pollSeconds.value = String(config.pollSeconds || 300);
+  if (providerId === 'bilibili') {
+    $('dm-config-form').elements.includeSystem.checked = config.includeSystem === true;
+  }
+}
+function migrationText(status, providerId) {
+  const migration = status.migration || status.configMigration;
+  if (migration && typeof migration === 'object') {
+    if (textValue(migration.notice)) return migration.notice;
+    if (migration.complete === true) return '已完成';
+    if (migration.migrated === true) {
+      return '原 ' + (migration.originalSeconds ?? '未记录') + ' 秒已调整为 ' + (migration.seconds ?? '300') + ' 秒';
+    }
+  }
+  if (providerId === 'bilibili' && migrationNotice) return migrationNotice;
+  return '后端未提供迁移结果';
+}
+function statusLines(status, providerId) {
+  const info = providerInfo(providerId);
+  const config = status.config || {};
+  const polling = status.polling || {};
+  const queue = status.queue || {};
+  const discovery = status.discovery || {};
+  const login = status.login || {};
+  const binding = status.binding || {};
+  const destination = status.destination && typeof status.destination === 'object' ? status.destination : {};
+  const configuredPoll = numberValue(config.pollSeconds) || 300;
+  const effectivePoll = numberValue(config.effectivePollSeconds) || numberValue(polling.effectiveIntervalSeconds) || numberValue(polling.seconds) || configuredPoll;
+  const nextAllowed = Number.isFinite(status.nextRetryAt) ? status.nextRetryAt :
+    (Number.isFinite(polling.nextAllowedAt) ? polling.nextAllowedAt : null);
+  const cooldown = textValue(polling.cooldownReason) || (polling.paused === true ? textValue(polling.pauseReason) : '');
+  const reason = textValue(status.reasonText) || textValue(status.moduleError);
+  const destinationText = destination.kind === 'group'
+    ? (textValue(destination.label) || '群目标')
+    : (textValue(destination.label) || '主人私聊');
+  const bindingText = binding.bound === true ? '已绑定 ' + textValue(binding.mask) : '未绑定';
   const lines = [
-    '监听：' + (dmStateLabels[dm.state] || '不可用') + (dm.reasonText ? '（' + dm.reasonText + '）' : ''),
-    '账号：' + (dm.account && dm.account.verified ? '本次运行已校验' : '未在本次运行校验') + '；绑定：' + binding,
-    '初始化/追赶：' + ((dm.discovery && dm.discovery.phase) || 'idle') + '；已扫描页 ' + ((dm.discovery && dm.discovery.pages) || 0),
-    '待发送：' + ((dm.queue && dm.queue.unfinished) || 0) + '；待核对：' + ((dm.queue && dm.queue.pending) || 0) + '；未知：' + ((dm.queue && dm.queue.unknown) || 0),
-    '上次成功：' + timeText(dm.lastSuccessAt) + '；下次重试：' + timeText(dm.nextRetryAt),
-    '轮询间隔：' + (dm.polling && dm.polling.seconds ? dm.polling.seconds : dm.pollSeconds || 60) + ' 秒'
+    '平台：' + info.label + '；登录：' + (loginStateLabels[login.state] || '不可用') +
+      (textValue(login.errorSummary) ? '（' + login.errorSummary + '）' : ''),
+    '提醒：' + (config.enabled === true ? '已启用' : '未启用') + '；监听：' +
+      (config.enabled === true ? (dmStateLabels[status.state] || status.state || '不可用') : '未启用') +
+      (reason ? '（' + reason + '）' : ''),
+    '接收：' + destinationText + '；主人绑定：' + bindingText,
+    '设定间隔：' + configuredPoll + ' 秒；当前有效间隔：' + effectivePoll + ' 秒',
+    '下次允许：' + timeText(nextAllowed) + '；冷却原因：' + (cooldown || '无') +
+      (polling.manualRecoveryRequired === true ? '；需人工恢复' : ''),
+    '上次有效同步：' + timeText(status.lastSuccessAt),
+    '待发送 ' + (Number(queue.unfinished) || 0) + '；待核对 ' + (Number(queue.pending) || 0) +
+      '；未知 ' + (Number(queue.unknown) || 0) + '；失败 ' + (Number(queue.failed) || 0),
+    '初始化/追赶：' + textValue(discovery.phase || 'idle') + '；已扫描页 ' +
+      (Number(discovery.pages) || 0) + '；会话 ' + (Number(discovery.sessionCount) || 0) +
+      (discovery.gap === true ? '；存在缺口' : ''),
+    '迁移：' + migrationText(status, providerId)
   ];
-  if (dm.moduleError) lines.push(dm.moduleError);
-  $('dm-status').textContent = lines.join('\n');
-  $('dm-status').style.whiteSpace = 'pre-line';
+  return lines.join('\n');
 }
-async function loadDmStatus() {
+function applyProviderStatus(raw, providerId, options) {
+  const status = normalizeProviderStatus(raw, providerId);
+  if (!status) return null;
+  if (status.provider && status.provider.id && status.provider.id !== providerId) return null;
+  const version = safeServerVersion(status);
+  if (isOlderServerVersion(providerId, version)) return null;
+  lastProviderStatus = status;
+  const config = normalizeProviderConfig(status.config, providerId);
+  const info = providerInfo(providerId);
+  info.enabled = config.enabled === true;
+  info.status = textValue(status.state) || info.status;
+  info.statusText = config.enabled === true ? (dmStateLabels[status.state] || '已启用') : '未启用';
+  info.paused = status.polling && (status.polling.paused === true || Boolean(status.polling.cooldownReason));
+  $('dm-status').textContent = statusLines(status, providerId);
+  $('dm-effective').textContent = '设定间隔 ' + config.pollSeconds + ' 秒 · 当前有效 ' + config.effectivePollSeconds +
+    ' 秒 · 下次允许 ' + timeText(Number.isFinite(status.nextRetryAt) ? status.nextRetryAt : status.polling && status.polling.nextAllowedAt);
+  $('dm-migration').textContent = '配置迁移：' + migrationText(status, providerId);
+  if (!supportsPrivate(providerId) && $('dm-login-status').textContent === '读取中') {
+    $('dm-login-status').textContent = '登录：不可用 · ' + unavailableReason(providerId);
+  }
+  if ((options && options.fillForm === true) || formProvider !== providerId) {
+    fillDmForm(config, providerId);
+    formProvider = providerId;
+  }
+  renderProviderChrome();
+  noteServerVersion(providerId, version);
+  return status;
+}
+async function loadProviders() {
+  let list = null;
   try {
-    const data = await api('/bili/dm/status');
-    renderDm(data);
-    return data;
-  } catch (error) { $('dm-status').textContent = error.message; return null; }
+    const data = await api('/dm/providers');
+    if (Array.isArray(data.providers)) list = data.providers;
+  } catch { /* fallback registry below */ }
+  providerList = PROVIDER_IDS.map((id) => {
+    const found = list && list.find((provider) => provider && provider.id === id);
+    return normalizeProvider(found || PROVIDER_FALLBACKS[id], id);
+  });
+  renderProviderOptions();
+  return providerList;
+}
+async function loadProviderStatus(providerId, capture, options) {
+  const lock = capture || captureView(providerId, 'status');
+  try {
+    const raw = await providerRequest(providerId, {
+      method: 'GET', suffix: '/status',
+      fallback: { path: '/bili/dm/status', method: 'GET' }
+    });
+    if (readStale(lock)) return null;
+    return applyProviderStatus(raw, providerId, options);
+  } catch (error) {
+    if (!readStale(lock)) {
+      $('dm-status').textContent = '状态读取失败：' + error.message;
+      $('dm-effective').textContent = '状态读取失败。';
+    }
+    return null;
+  }
+}
+async function loadLoginStatus(providerId, capture) {
+  const lock = capture || captureView(providerId, 'login');
+  try {
+    const raw = await providerRequest(providerId, {
+      method: 'GET', suffix: '/login/status',
+      fallback: { path: '/bili/login/status', method: 'GET' }
+    });
+    if (readStale(lock)) return null;
+    const login = raw && raw.login && typeof raw.login === 'object' ? raw.login : raw;
+    if (!login || typeof login !== 'object') return null;
+    const version = safeServerVersion({ login });
+    if (isOlderServerVersion(providerId, version)) return null;
+    renderLogin(login, providerId, lock);
+    noteServerVersion(providerId, version);
+    return login;
+  } catch (error) {
+    if (!readStale(lock)) {
+      $('dm-login-status').textContent = supportsPrivate(providerId)
+        ? '登录状态读取失败：' + error.message
+        : '登录：不可用 · ' + unavailableReason(providerId);
+      clearQrTimer();
+    }
+    return null;
+  }
 }
 function updateGroupControls() {
+  const privateOk = supportsPrivate(selectedProviderId);
   const sendToGroup = $('dm-send-to-group').checked;
-  const select = $('dm-group-select');
-  select.disabled = !sendToGroup || dmGroups.length === 0;
-  $('dm-target-save').disabled = sendToGroup && dmGroups.length === 0;
+  setActionDisabled($('dm-group-select'), !privateOk || !sendToGroup || dmGroups.length === 0);
+  setActionDisabled($('dm-target-save'), !privateOk || (sendToGroup && dmGroups.length === 0));
 }
 function renderDmGroups(data) {
-  const selected = data && data.selected ? data.selected : {};
-  dmGroups = Array.isArray(data && data.groups) ? data.groups : [];
+  const selected = data && data.selected && typeof data.selected === 'object' ? data.selected : {};
+  dmGroups = Array.isArray(data && data.groups) ? data.groups.filter((group) => group && typeof group.id === 'string') : [];
   $('dm-send-to-group').checked = selected.sendToGroup === true;
   const select = $('dm-group-select');
   select.replaceChildren();
@@ -265,44 +866,80 @@ function renderDmGroups(data) {
     placeholder.value = '';
     select.append(placeholder);
     for (const group of dmGroups) {
-      const option = element('option', group.name + ' · ' + group.id.slice(-4));
-      option.value = group.id;
+      const id = String(group.id);
+      const tail = id.slice(-4);
+      const option = element('option', textValue(group.name) + ' · ' + tail);
+      option.value = id;
       select.append(option);
     }
-    if (selected.groupId && dmGroups.some((group) => group.id === selected.groupId)) {
-      select.value = selected.groupId;
+    if (selected.groupId && dmGroups.some((group) => String(group.id) === String(selected.groupId))) {
+      select.value = String(selected.groupId);
     }
   }
   $('dm-group-hint').textContent = dmGroups.length
-    ? '群列表来自机器人最近识别的群；选择后自动通知只发到这一个群。'
+    ? '群列表来自机器人最近识别的群；选择后自动通知只发到当前平台选定的这一个群。'
     : '群列表来自机器人最近识别的群，未出现请在目标群发一条消息后刷新。';
   $('dm-target-status').textContent = selected.sendToGroup
     ? '当前自动通知目标：群 ' + String(selected.groupId || '').slice(-4)
     : '当前自动通知目标：主人私聊';
   updateGroupControls();
 }
-async function loadDmGroups() {
+async function loadDmGroups(capture, providerId) {
+  const provider = providerId || (capture && capture.providerId) || selectedProviderId;
+  if (provider !== selectedProviderId) return null;
+  if (!supportsPrivate(provider)) {
+    renderDmGroups({ groups: [], selected: {} });
+    return null;
+  }
+  const lock = capture || captureView(provider, 'groups');
   try {
-    const data = await api('/bili/dm/groups');
+    const data = await providerRequest(provider, {
+      method: 'GET', suffix: '/groups',
+      fallback: { path: '/bili/dm/groups', method: 'GET' }
+    });
+    if (readStale(lock)) return null;
     renderDmGroups(data);
     return data;
   } catch (error) {
-    $('dm-group-hint').textContent = error.message;
+    if (!readStale(lock)) $('dm-group-hint').textContent = error.message;
     return null;
   }
 }
-async function loadLoginStatus() {
-  try {
-    const data = await api('/bili/login/status');
-    renderLogin(data);
-    return data;
-  } catch (error) { $('dm-login-status').textContent = error.message; return null; }
+async function refreshAccessView(options, providerId, generation, revision) {
+  if (!isSectionOpen('dm-card')) return null;
+  const provider = providerId || selectedProviderId;
+  if (provider !== selectedProviderId) return null;
+  const statusCapture = captureView(provider, 'status');
+  const loginCapture = captureView(provider, 'login');
+  await Promise.all([
+    loadProviderStatus(provider, statusCapture, options),
+    loadLoginStatus(provider, loginCapture)
+  ]);
+  if (provider !== selectedProviderId || generation !== undefined && generation !== viewGeneration ||
+    revision !== undefined && revision !== accountRevision) return null;
+  return lastProviderStatus;
 }
-async function dmAction(button, fn) {
-  if (button) button.disabled = true;
+async function refreshAccessAndGroups(options, providerId, generation, revision) {
+  const provider = providerId || selectedProviderId;
+  const gen = generation === undefined ? viewGeneration : generation;
+  const rev = revision === undefined ? accountRevision : revision;
+  await refreshAccessView(options, provider, gen, rev);
+  if (provider !== selectedProviderId || gen !== viewGeneration || rev !== accountRevision) return null;
+  if (!isSectionOpen('dm-card')) return null;
+  return loadDmGroups(captureView(provider, 'groups'), provider);
+}
+async function runAction(button, capture, fn) {
+  const owner = {};
+  if (button) actionOwners.set(button, owner);
+  applyControlState();
   try { return await fn(); }
-  catch (error) { feedback(error.message, true); return null; }
-  finally { if (button) button.disabled = false; }
+  catch (error) { if (!viewStale(capture)) feedback(error.message, true); return null; }
+  finally {
+    if (button && actionOwners.get(button) === owner) {
+      actionOwners.delete(button);
+      applyControlState();
+    }
+  }
 }
 function formValues(form) {
   const out = {};
@@ -345,10 +982,18 @@ function setNested(target, keys, value) {
 async function loadConfig() {
   const data = await api('/config');
   fillForm($('settings-form'), data.config); fillForm($('engine-form'), data.config);
-  fillForm($('dm-config-form'), data.config);
   $('advanced').value = JSON.stringify(data.advanced,null,2);
   fillCredentials(data.credentials || {});
   $('restart-notice').hidden = !data.restartRequired;
+  if (data.configMigration && data.configMigration.notice) {
+    migrationNotice = data.configMigration.notice;
+    $('dm-migration').textContent = '配置迁移：' + migrationNotice;
+  }
+  configLoaded = true;
+  if (isSectionOpen('platforms-section')) await loadPlatforms();
+}
+async function loadPlatforms(force) {
+  if (platformsLoaded && !force) return;
   const platforms = await api('/platforms');
   $('platforms').replaceChildren();
   for (const platform of platforms.platforms) {
@@ -362,10 +1007,20 @@ async function loadConfig() {
     select.value = platform.mode;
     cell.append(label,select,element('small',platform.verification)); $('platforms').append(cell);
   }
-  configLoaded = true;
+  platformsLoaded = true;
+}
+function renderLogs(data) {
+  if (!data) return;
+  const state = data.engine || {};
+  $('diagnostics').textContent = JSON.stringify(state,null,2);
+  $('operations').textContent = (data.operations || []).slice(-20).map((task) => {
+    const time = timeText(task.createdAt || task.startedAt);
+    return time + ' · ' + textValue(task.action) + '：' + textValue(task.state) + (task.error ? ' · ' + task.error : '');
+  }).join('\n') || '暂无维护操作记录。';
 }
 async function loadStatus() {
   const data = await api('/status');
+  lastStatus = data;
   const state = data.engine || {};
   $('engine-badge').textContent = data.ready ? '就绪' : state.state || state.phase || '未就绪';
   $('running').textContent = data.queue.running;
@@ -373,10 +1028,10 @@ async function loadStatus() {
   $('platform-count').textContent = data.platformCount;
   const bytes = Number(state.cacheBytes || (state.cache && state.cache.bytes) || 0);
   $('cache').textContent = (bytes / 1048576).toFixed(1);
-  $('engine-detail').textContent = data.prepareError || state.message || state.detail || '引擎状态与依赖详情可展开查看。';
-  $('diagnostics').textContent = JSON.stringify(state,null,2);
+  $('engine-detail').textContent = data.prepareError || state.message || state.detail || '引擎状态与依赖详情可在页面底部展开查看。';
   $('restart-notice').hidden = !data.restartRequired;
-  $('operations').textContent = (data.operations || []).slice(-3).map((task) => task.action + '：' + task.state + (task.error ? ' · ' + task.error : '')).join(' / ');
+  const operations = data.operations || [];
+  $('operation-progress').textContent = operations.slice(-3).map((task) => task.action + '：' + task.state + (task.error ? ' · ' + task.error : '')).join(' / ');
   document.querySelector('[data-op="restart"]').disabled = data.queue.running > 0 || data.queue.waiting > 0;
   if (data.boundaries) {
     $('boundaries').replaceChildren();
@@ -387,6 +1042,7 @@ async function loadStatus() {
     $('bypass').value = data.boundaries.bypassRegex || '';
     $('auth-boundary').textContent = data.boundaries.panelAuthorization || '';
   }
+  if (isSectionOpen('logs-section')) renderLogs(data);
 }
 async function loadTasks() {
   const data = await api('/tasks?page=' + currentPage + '&pageSize=20');
@@ -407,18 +1063,114 @@ async function loadTasks() {
     tr.append(element('td',reasons.join('；')));
     $('task-rows').append(tr);
   }
+  logsLoaded = true;
+  $('logs-note').textContent = '已加载 · 第 ' + currentPage + ' 页';
 }
 async function refresh() {
   if (refreshing) return;
   refreshing = true;
-  try { await Promise.all([loadStatus(),loadTasks()]); } catch (error) { feedback(error.message,true); }
+  try {
+    await loadStatus();
+    if (isSectionOpen('logs-section')) await loadTasks();
+    if (isSectionOpen('platforms-section')) await loadPlatforms();
+    if (isSectionOpen('dm-card')) await refreshAccessView();
+  } catch (error) { feedback(error.message,true); }
   finally { refreshing = false; }
 }
-async function withButton(form, fn) {
+async function withButton(form, fn, capture) {
   const button = form.querySelector('button[type="submit"]');
-  if (button) button.disabled = true;
+  const owner = {};
+  if (button) actionOwners.set(button, owner);
+  if (capture) applyControlState();
+  else if (button) button.disabled = true;
   try { await fn(); } catch (error) { feedback(error.message,true); }
-  finally { if (button) button.disabled = false; }
+  finally {
+    if (button && actionOwners.get(button) === owner) {
+      actionOwners.delete(button);
+      if (capture) applyControlState();
+      else button.disabled = false;
+    }
+  }
+}
+function isSectionOpen(id) {
+  const node = $(id);
+  return Boolean(node && node.open);
+}
+function onProviderChange() {
+  const next = $('dm-provider-select').value;
+  if (!PROVIDER_IDS.includes(next) || next === selectedProviderId) return;
+  selectedProviderId = next;
+  viewGeneration += 1;
+  accountRevision += 1;
+  savePreferredProvider(next);
+  clearQrTimer();
+  dmGroups = [];
+  formProvider = null;
+  $('dm-manual-cookie').value = '';
+  $('dm-login-status').textContent = '读取中';
+  $('dm-status').textContent = '读取中';
+  $('dm-effective').textContent = '读取中';
+  $('dm-migration').textContent = '';
+  $('dm-acceptance').open = false;
+  clearAcceptance();
+  showQr(null);
+  renderDmGroups({ groups: [], selected: {} });
+  renderProviderOptions();
+  if (isSectionOpen('dm-card')) {
+    refreshAccessAndGroups({ fillForm: true }, next, viewGeneration, accountRevision).catch(() => {});
+  }
+}
+function onAccessToggle(open) {
+  if (open) {
+    stopAggregateTimer();
+    renderProviderChrome();
+    refreshAccessAndGroups({ fillForm: true }, selectedProviderId, viewGeneration, accountRevision).catch(() => {});
+    startAccessTimer();
+  } else {
+    stopAccessTimer();
+    clearQrTimer();
+    startAggregateTimer();
+  }
+}
+function startEngineTimer() {
+  if (engineTimer) return;
+  engineTimer = setInterval(() => {
+    if (document.hidden) return;
+    loadStatus().catch(() => {});
+  }, 5000);
+}
+function startAccessTimer() {
+  if (accessTimer || document.hidden) return;
+  accessTimer = setInterval(() => {
+    if (document.hidden) { stopAccessTimer(); return; }
+    if (!isSectionOpen('dm-card')) { stopAccessTimer(); return; }
+    refreshAccessView().catch(() => {});
+  }, 8000);
+}
+function stopAccessTimer() {
+  clearInterval(accessTimer);
+  accessTimer = null;
+}
+function startAggregateTimer() {
+  if (aggregateTimer || document.hidden || isSectionOpen('dm-card')) return;
+  aggregateTimer = setInterval(() => {
+    if (document.hidden) { stopAggregateTimer(); return; }
+    if (isSectionOpen('dm-card')) { stopAggregateTimer(); return; }
+    loadProviders().catch(() => {});
+  }, 60000);
+}
+function stopAggregateTimer() {
+  clearInterval(aggregateTimer);
+  aggregateTimer = null;
+}
+function stopAllTimers() {
+  clearInterval(engineTimer);
+  engineTimer = null;
+  stopAccessTimer();
+  stopAggregateTimer();
+  clearQrTimer();
+  clearTimeout(operationTimer);
+  operationTimer = null;
 }
 for (const id of ['settings-form','engine-form']) {
   $(id).addEventListener('submit', (event) => {
@@ -495,90 +1247,244 @@ $('preview-form').addEventListener('submit',(event) => {
     $('preview-result').replaceChildren(element('p','真实解析进行中…','muted')); watchPreview(data.taskId);
   });
 });
-$('dm-login-start').addEventListener('click', () => dmAction($('dm-login-start'), async () => {
-  const data = await api('/bili/login/start', 'POST', {});
-  renderLogin(data);
-  feedback('二维码已生成；请使用 B 站手机客户端扫码并确认。');
-  await loadDmStatus();
-}));
-$('dm-login-cancel').addEventListener('click', () => dmAction($('dm-login-cancel'), async () => {
-  renderLogin(await api('/bili/login/cancel', 'POST', {}));
-  feedback('扫码会话已取消。');
-}));
-$('dm-login-inspect').addEventListener('click', () => dmAction($('dm-login-inspect'), async () => {
-  const data = await api('/bili/login/inspect');
-  renderLogin(data);
-  feedback(data.state === 'valid' ? 'B 站登录有效。' : 'B 站登录未确认：' + (loginStateLabels[data.state] || '未知'));
-}));
-$('dm-login-logout').addEventListener('click', () => dmAction($('dm-login-logout'), async () => {
-  const data = await api('/bili/login/logout', 'POST', {});
-  feedback(data.warning || '已退出共享登录。');
-  await loadConfig().catch(() => {});
-  await loadDmStatus();
-  await loadLoginStatus();
-}));
+$('shortcut-access').addEventListener('click',() => {
+  const node = $('dm-card');
+  const wasOpen = node.open;
+  node.open = true;
+  if (wasOpen) onAccessToggle(true);
+  setTimeout(() => {
+    const select = $('dm-provider-select');
+    select.focus();
+    select.scrollIntoView({ block: 'center' });
+  }, 0);
+});
+$('dm-provider-select').addEventListener('change', onProviderChange);
+$('dm-card').addEventListener('toggle', () => onAccessToggle($('dm-card').open));
+$('dm-acceptance').addEventListener('toggle', () => {
+  if (!$('dm-acceptance').open) return;
+  loadAcceptance(selectedProviderId, captureView(selectedProviderId, 'acceptance')).catch(() => {});
+});
+$('dm-acceptance-refresh').addEventListener('click', () => {
+  const providerId = selectedProviderId;
+  if (providerId !== 'xiaoheihe') { feedback('验收记录仅适用于小黑盒。', true); return; }
+  loadAcceptance(providerId, captureView(providerId, 'acceptance')).catch(() => {});
+});
+$('logs-section').addEventListener('toggle', () => {
+  if (!$('logs-section').open) return;
+  renderLogs(lastStatus);
+  if (!logsLoaded) loadTasks().catch((error) => feedback(error.message,true));
+});
+$('platforms-section').addEventListener('toggle', () => {
+  if (!$('platforms-section').open) return;
+  loadPlatforms().catch((error) => feedback(error.message,true));
+});
+$('dm-login-start').addEventListener('click', () => {
+  const providerId = selectedProviderId;
+  const info = providerInfo(providerId);
+  if (!supportsPrivate(providerId) || !info.capabilities.supportsQrLogin) { feedback(unavailableReason(providerId),true); return; }
+  const capture = beginAction(providerId);
+  runAction($('dm-login-start'), capture, async () => {
+    const data = await providerRequest(providerId, {
+      method: 'POST', suffix: '/login/start', body: {},
+      fallback: { path: '/bili/login/start', method: 'POST' }
+    });
+    if (viewStale(capture)) return;
+    renderLogin(data, providerId, capture);
+    const login = data && data.login && typeof data.login === 'object' ? data.login : (data || {});
+    const errorSummary = textValue(login.errorSummary).replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 120);
+    if (['waiting', 'scanned'].includes(login.state)) {
+      feedback('二维码已生成；请使用 ' + info.label + ' 手机客户端扫码并确认。');
+    } else if (login.state === 'starting') {
+      feedback('正在申请安全二维码；请稍候。');
+    } else {
+      feedback(errorSummary || '登录申请失败，请检查登录状态。', true);
+    }
+  });
+});
+$('dm-login-cancel').addEventListener('click', () => {
+  const providerId = selectedProviderId;
+  if (!supportsPrivate(providerId) || !providerInfo(providerId).capabilities.supportsQrLogin) { feedback(unavailableReason(providerId),true); return; }
+  const capture = beginAction(providerId);
+  runAction($('dm-login-cancel'), capture, async () => {
+    const data = await providerRequest(providerId, {
+      method: 'POST', suffix: '/login/cancel', body: {},
+      fallback: { path: '/bili/login/cancel', method: 'POST' }
+    });
+    if (viewStale(capture)) return;
+    renderLogin(data, providerId, capture);
+    feedback('扫码会话已取消。');
+  });
+});
+$('dm-login-inspect').addEventListener('click', () => {
+  const providerId = selectedProviderId;
+  if (!supportsPrivate(providerId)) { feedback(unavailableReason(providerId),true); return; }
+  const capture = beginAction(providerId);
+  runAction($('dm-login-inspect'), capture, async () => {
+    const data = await providerRequest(providerId, {
+      method: 'POST', suffix: '/login/inspect', body: {},
+      fallback: { path: '/bili/login/inspect', method: 'GET' }
+    });
+    if (viewStale(capture)) return;
+    renderLogin(data, providerId, capture);
+    feedback(data.state === 'valid' ? '登录有效。' : '登录未确认：' + (loginStateLabels[data.state] || '未知'));
+  });
+});
+$('dm-login-logout').addEventListener('click', () => {
+  const providerId = selectedProviderId;
+  const caps = providerInfo(providerId).capabilities;
+  if (!supportsPrivate(providerId) || !(caps.supportsManualLogin || caps.supportsQrLogin)) { feedback(unavailableReason(providerId),true); return; }
+  const capture = beginAction(providerId);
+  runAction($('dm-login-logout'), capture, async () => {
+    const data = await providerRequest(providerId, {
+      method: 'POST', suffix: '/login/logout', body: {},
+      fallback: { path: '/bili/login/logout', method: 'POST' }
+    });
+    if (viewStale(capture)) return;
+    accountRevision += 1;
+    feedback(data.warning || '已退出当前平台共享登录。');
+    await refreshAccessView({ fillForm: true });
+    await loadConfig().catch(() => {});
+  });
+});
 $('dm-manual-form').addEventListener('submit', (event) => {
   event.preventDefault();
+  const providerId = selectedProviderId;
+  if (!supportsPrivate(providerId) || !providerInfo(providerId).capabilities.supportsManualLogin) {
+    feedback(unavailableReason(providerId) || '当前平台不支持手动 Cookie 登录。', true);
+    return;
+  }
+  const capture = beginAction(providerId);
   withButton(event.currentTarget, async () => {
     const input = $('dm-manual-cookie');
-    const data = await api('/bili/login/manual', 'POST', { cookie: input.value });
+    const data = await providerRequest(providerId, {
+      method: 'POST', suffix: '/login/manual', body: { cookie: input.value },
+      fallback: { path: '/bili/login/manual', method: 'POST' }
+    });
     input.value = '';
+    if (viewStale(capture)) return;
+    accountRevision += 1;
     feedback(data.ok ? 'Cookie 校验并保存成功；不会自动启用提醒。' : 'Cookie 未通过校验，请确认后重试。');
-    renderLogin({ ...data, ...(await api('/bili/login/status')) });
-    await loadDmStatus();
-  });
+    await refreshAccessView({ fillForm: true });
+  }, capture);
 });
 $('dm-config-form').addEventListener('submit', (event) => {
   event.preventDefault();
+  const providerId = selectedProviderId;
+  if (!supportsPrivate(providerId)) { feedback(unavailableReason(providerId),true); return; }
+  const capture = beginAction(providerId);
   withButton(event.currentTarget, async () => {
-    const data = await api('/bili/dm/config', 'PUT', formValues($('dm-config-form')));
-    fillForm($('dm-config-form'), data.config || {});
-    renderDm(data.dm || await api('/bili/dm/status'));
+    const values = formValues($('dm-config-form'));
+    const includeSystem = providerId === 'bilibili' && values.includeSystem === true;
+    const config = { enabled: values.enabled === true, pollSeconds: values.pollSeconds };
+    if (providerId === 'bilibili') config.includeSystem = includeSystem;
+    const body = { config };
+    const data = await providerRequest(providerId, {
+      method: 'PUT', suffix: '/config', body,
+      fallback: {
+        path: '/bili/dm/config', method: 'PUT',
+        body: () => ({
+          biliDmEnabled: values.enabled === true,
+          biliDmPollSeconds: values.pollSeconds,
+          biliDmIncludeSystem: includeSystem
+        })
+      }
+    });
+    if (viewStale(capture)) return;
+    if (data.dm) applyProviderStatus(data.dm, providerId, { fillForm: true });
+    else await loadProviderStatus(providerId, capture, { fillForm: true });
     feedback('私信设置已保存。');
+  }, capture);
+});
+$('dm-check').addEventListener('click', () => {
+  const providerId = selectedProviderId;
+  if (!supportsPrivate(providerId)) { feedback(unavailableReason(providerId),true); return; }
+  const capture = beginAction(providerId);
+  runAction($('dm-check'), capture, async () => {
+    const data = await providerRequest(providerId, {
+      method: 'POST', suffix: '/check', body: {},
+      fallback: { path: '/bili/dm/check', method: 'POST' }
+    });
+    if (viewStale(capture)) return;
+    if (data.dm) applyProviderStatus(data.dm, providerId, { fillForm: true });
+    else await loadProviderStatus(providerId, capture, { fillForm: true });
+    feedback('已执行一次检查；若处于冷却会遵守下次允许时间。');
   });
 });
-$('dm-check').addEventListener('click', () => dmAction($('dm-check'), async () => {
-  const data = await api('/bili/dm/check', 'POST', {});
-  renderDm(data.dm);
-  feedback('已执行一次检查；若处于退避会遵守退避时间。');
-}));
-$('dm-test').addEventListener('click', () => dmAction($('dm-test'), async () => {
-  const data = await api('/bili/dm/test', 'POST', {});
-  feedback(data.sent > 0 ? '已发送带标记的测试通知。' : '测试通知未确认送达，请查看私信状态。');
-  await loadDmStatus();
-}));
+$('dm-test').addEventListener('click', () => {
+  const providerId = selectedProviderId;
+  if (!supportsPrivate(providerId)) { feedback(unavailableReason(providerId),true); return; }
+  const capture = beginAction(providerId);
+  runAction($('dm-test'), capture, async () => {
+    const data = await providerRequest(providerId, {
+      method: 'POST', suffix: '/test', body: {},
+      fallback: { path: '/bili/dm/test', method: 'POST' }
+    });
+    if (viewStale(capture)) return;
+    feedback(data.sent > 0 ? '已发送带标记的测试通知。' : '测试通知未确认送达，请查看私信状态。');
+    await refreshAccessView();
+  });
+});
 $('dm-send-to-group').addEventListener('change', updateGroupControls);
-$('dm-groups-refresh').addEventListener('click', () => dmAction($('dm-groups-refresh'), async () => {
-  await loadDmGroups();
-  feedback('群列表已刷新。');
-}));
-$('dm-target-save').addEventListener('click', () => dmAction($('dm-target-save'), async () => {
-  const sendToGroup = $('dm-send-to-group').checked;
-  const groupId = sendToGroup ? $('dm-group-select').value : '';
-  if (sendToGroup && !groupId) throw new Error('请先选择一个群，或取消“发送到群”。');
-  const data = await api('/bili/dm/target', 'PUT', { sendToGroup, groupId: sendToGroup ? groupId : undefined });
-  renderDmGroups({ groups: dmGroups, selected: data.selected || { sendToGroup, groupId } });
-  feedback(sendToGroup ? '接收目标已保存：自动通知只发送到所选群。' : '接收目标已保存：自动通知发送到主人私聊。');
-  await loadDmStatus();
-}));
+$('dm-groups-refresh').addEventListener('click', () => {
+  const providerId = selectedProviderId;
+  if (!supportsPrivate(providerId)) { feedback(unavailableReason(providerId),true); return; }
+  const capture = beginAction(providerId);
+  runAction($('dm-groups-refresh'), capture, async () => {
+    await loadDmGroups(capture, providerId);
+    if (!viewStale(capture)) feedback('群列表已刷新。');
+  });
+});
+$('dm-target-save').addEventListener('click', () => {
+  const providerId = selectedProviderId;
+  if (!supportsPrivate(providerId)) { feedback(unavailableReason(providerId),true); return; }
+  const capture = beginAction(providerId);
+  runAction($('dm-target-save'), capture, async () => {
+    const sendToGroup = $('dm-send-to-group').checked;
+    const groupId = sendToGroup ? $('dm-group-select').value : '';
+    if (sendToGroup && !groupId) throw new Error('请先选择一个群，或取消“发送到群”。');
+    const data = await providerRequest(providerId, {
+      method: 'PUT', suffix: '/target', body: { sendToGroup, groupId: sendToGroup ? groupId : undefined },
+      fallback: { path: '/bili/dm/target', method: 'PUT' }
+    });
+    if (viewStale(capture)) return;
+    renderDmGroups({ groups: dmGroups, selected: data.selected || { sendToGroup, groupId } });
+    feedback(sendToGroup ? '接收目标已保存：自动通知只发送到所选群。' : '接收目标已保存：自动通知发送到主人私聊。');
+    await loadProviderStatus(providerId, capture);
+  });
+});
 $('refresh').addEventListener('click',refresh);
+$('tasks-refresh').addEventListener('click',() => loadTasks().catch((error) => feedback(error.message,true)));
 $('prev-page').addEventListener('click',() => { if (currentPage > 1) { currentPage--; loadTasks().catch((e) => feedback(e.message,true)); } });
 $('next-page').addEventListener('click',() => { if (currentPage < totalPages) { currentPage++; loadTasks().catch((e) => feedback(e.message,true)); } });
-loadConfig()
-  .then(refresh)
-  .then(loadDmStatus)
-  .then(loadDmGroups)
-  .then(loadLoginStatus)
-  .catch((error) => feedback(error.message,true));
-const refreshTimer = setInterval(refresh,5000);
-dmTimer = setInterval(() => { loadDmStatus().catch(() => {}); }, 8000);
-window.addEventListener('pagehide', () => {
-  clearInterval(refreshTimer);
-  clearInterval(dmTimer);
-  clearInterval(qrTimer);
-  clearTimeout(operationTimer);
-  qrTimer = null; dmTimer = null;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopAllTimers();
+    return;
+  }
+  startEngineTimer();
+  loadStatus().catch(() => {});
+  loadProviders().catch(() => {});
+  if (isSectionOpen('dm-card')) {
+    refreshAccessView().catch(() => {});
+    startAccessTimer();
+  } else {
+    startAggregateTimer();
+  }
+  if (isSectionOpen('logs-section')) renderLogs(lastStatus);
 });
+window.addEventListener('pagehide', stopAllTimers);
+async function boot() {
+  renderProviderOptions();
+  startEngineTimer();
+  startAggregateTimer();
+  try { await loadConfig(); } catch (error) { feedback(error.message,true); }
+  await loadProviders().catch(() => {});
+  await loadStatus().catch((error) => feedback(error.message,true));
+  if (isSectionOpen('dm-card')) {
+    await refreshAccessAndGroups({ fillForm: true }, selectedProviderId, viewGeneration, accountRevision).catch(() => {});
+  }
+}
+boot();
 </script>
 </body>
 </html>

@@ -146,16 +146,40 @@ function merge(base, override) {
 }
 
 /**
+ * Remove every private-message credential partition at any depth while keeping
+ * all unrelated platform, download and translation settings intact.
+ */
+export function stripPrivateMessageProviders(value, depth = 0) {
+  if (depth > 32) return undefined;
+  if (Array.isArray(value)) {
+    return value.map((item) => stripPrivateMessageProviders(item, depth + 1));
+  }
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'privateMessageProviders') continue;
+    if (['__proto__', 'constructor', 'prototype'].includes(key)) continue;
+    out[key] = stripPrivateMessageProviders(child, depth + 1);
+  }
+  return out;
+}
+
+/**
  * Merge root credential secrets with the legacy `upstream` block while keeping
  * the canonical root Bili cookie. The old layout duplicated the cookie under
  * `upstream.bilibili_enhanced`; that duplicate is ignored so it cannot mask the
  * shared Node login credential. All other upstream secrets still apply.
+ * The private-message provider partition is deliberately excluded in both
+ * spellings so unverified credentials are never copied into Python config.
  */
 export function credentialSecretConfig(credentials = {}) {
-  const source = credentials && typeof credentials === 'object' && !Array.isArray(credentials) ? credentials : {};
+  const cleaned = stripPrivateMessageProviders(
+    credentials && typeof credentials === 'object' && !Array.isArray(credentials) ? credentials : {},
+  );
+  const source = cleaned && typeof cleaned === 'object' && !Array.isArray(cleaned) ? cleaned : {};
   const root = {};
   for (const [key, value] of Object.entries(source)) {
-    if (['engineToken', 'engine', 'upstream', '__proto__', 'constructor', 'prototype'].includes(key)) continue;
+    if (['engineToken', 'engine', 'upstream', 'privateMessageProviders', '__proto__', 'constructor', 'prototype'].includes(key)) continue;
     root[key] = structuredClone(value);
   }
   const upstream = source.upstream && typeof source.upstream === 'object' && !Array.isArray(source.upstream)
@@ -517,8 +541,9 @@ export function createEngineHost({ ctx, config = () => ({}) }) {
     let raw = JSON.parse(bundle.files.get('config.example.json').toString('utf8'));
     const advanced = readJson(settingsFile());
     const credentials = readJson(credentialsFile());
-    raw = merge(raw, advanced.upstream || advanced);
+    raw = merge(raw, stripPrivateMessageProviders(advanced.upstream || advanced));
     raw = merge(raw, credentialSecretConfig(credentials));
+    raw = stripPrivateMessageProviders(raw);
     const maxFileMiB = boundedNumber(cfg().maxFileSizeMiB ?? cfg().maxFileMiB ?? cfg().maxFileSizeMb, 200, 1, 200);
     const configuredVideo = boundedNumber(raw.download?.max_video_size_mb, maxFileMiB, 0, 200);
     raw.download = {

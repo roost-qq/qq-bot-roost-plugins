@@ -94,7 +94,7 @@ export function registerPanel(ctx, runtime) {
       return result;
     } catch (error) {
       const code = error?.code === 'QUEUE_FULL' ? 429 : error?.code === 'DM_STALE' ? 409 : 400;
-      const message = url.startsWith('/bili/')
+      const message = url.startsWith('/bili/') || url.startsWith('/dm/')
         ? runtime.dmErrorText?.(error) || '私信功能暂时不可用。'
         : runtime.settings.sanitize(error?.message || '操作失败');
       return respond(req, code, { error: message });
@@ -104,6 +104,7 @@ export function registerPanel(ctx, runtime) {
   route('GET', '/config', async () => ({
     config: runtime.settings.publicConfig(), advanced: runtime.settings.advanced(),
     credentials: runtime.settings.credentialHints(), restartRequired: runtime.restartRequired,
+    migration: runtime.settings.configMigration(),
   }));
   route('PUT', '/config', async ({ body }) => {
     const patch = isObject(body?.config) ? body.config : body;
@@ -161,6 +162,56 @@ export function registerPanel(ctx, runtime) {
     return { task: runtime.settings.sanitize(task) };
   });
   route('GET', '/boundaries', async () => runtime.boundaries);
+  route('GET', '/dm/providers', async () => ({ providers: runtime.providerList() }));
+  route('GET', '/dm/providers/:provider/status', async ({ params }) => (
+    runtime.providerStatus(params.provider)
+  ));
+  // Read-only local snapshot for the sanitized acceptance log. This route never
+  // triggers an upstream request and never returns message bodies or credentials.
+  route('GET', '/dm/providers/:provider/acceptance', async ({ params, query }) => (
+    runtime.providerAcceptance(params.provider, { query })
+  ));
+  route('GET', '/dm/providers/:provider/login/status', async ({ params }) => (
+    runtime.providerLoginStatus(params.provider, true)
+  ));
+  route('POST', '/dm/providers/:provider/login/start', async ({ params }) => (
+    runtime.providerLoginStart(params.provider)
+  ));
+  route('POST', '/dm/providers/:provider/login/cancel', async ({ params }) => (
+    runtime.providerLoginCancel(params.provider)
+  ));
+  route('POST', '/dm/providers/:provider/login/inspect', async ({ params }) => (
+    runtime.providerLoginInspect(params.provider)
+  ));
+  route('POST', '/dm/providers/:provider/login/manual', async ({ params, body }) => (
+    runtime.providerLoginManual(params.provider, body)
+  ));
+  route('POST', '/dm/providers/:provider/login/logout', async ({ params }) => (
+    runtime.providerLoginLogout(params.provider)
+  ));
+  route('PUT', '/dm/providers/:provider/config', async ({ params, body }) => (
+    runtime.providerSaveConfig(params.provider, body)
+  ));
+  route('GET', '/dm/providers/:provider/groups', async ({ params }) => (
+    runtime.providerGroupOptions(params.provider)
+  ));
+  route('PUT', '/dm/providers/:provider/target', async ({ params, body }) => (
+    runtime.providerSetTarget(params.provider, body)
+  ));
+  route('POST', '/dm/providers/:provider/check', async ({ params }) => ({
+    ok: true,
+    dm: await runtime.providerCheck(params.provider),
+  }));
+  route('POST', '/dm/providers/:provider/test', async ({ params }) => {
+    const result = await runtime.providerSendTest(params.provider);
+    return {
+      ...result,
+      note: '测试使用现有绑定并重新校验主人权限；不读取或消耗真实私信。',
+    };
+  });
+  route('POST', '/dm/providers/:provider/recovery', async ({ params }) => (
+    runtime.providerClearManualRecovery(params.provider)
+  ));
   // Dedicated Bilibili login and private-message routes stay inside the same
   // authenticated plugin route prefix. The dispatcher's maintenance token is
   // not owner identity; these handlers never accept a target from the body.
@@ -182,6 +233,7 @@ export function registerPanel(ctx, runtime) {
     const result = await runtime.dmSendTest();
     return { ...result, note: '测试使用现有绑定并重新校验主人权限；不读取或消耗真实私信。' };
   });
+  route('POST', '/bili/dm/recovery', async () => runtime.dmClearManualRecovery());
   if (typeof ctx.registerPage === 'function') {
     const file = fileURLToPath(new URL('./page.html', import.meta.url));
     // Reading the local template is short and does not wait for engine setup.

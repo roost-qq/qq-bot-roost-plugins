@@ -8,6 +8,9 @@
  * summaries only.
  */
 
+import { createHash } from 'node:crypto';
+import { parseRetryAfter as parseRetryAfterHeader } from './private-message-request-policy.js';
+
 const ENDPOINTS = Object.freeze({
   qrGenerate: ['passport.bilibili.com', '/x/passport-login/web/qrcode/generate'],
   qrPoll: ['passport.bilibili.com', '/x/passport-login/web/qrcode/poll'],
@@ -31,6 +34,7 @@ const ID_RE = /^(0|[1-9]\d{0,39})$/;
 const NUMBER_RE = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE = BigInt(Number.MIN_SAFE_INTEGER);
+const VOLATILE_QUERY_KEYS = new Set(['sign', 'signature', 'ts', 'timestamp', 'nonce', 'w_rid', 'wts']);
 
 export const SAFE_MESSAGES = Object.freeze({
   BILI_CANCELLED: '请求已取消',
@@ -41,7 +45,9 @@ export const SAFE_MESSAGES = Object.freeze({
   BILI_RESPONSE: 'B 站返回了无法识别的数据',
   BILI_AUTH: 'B 站账号未登录或登录已失效',
   BILI_COOKIE: '登录成功但未取得有效 Cookie',
+  BILI_STORAGE: '登录成功但 Cookie 保存失败，请稍后重试',
   BILI_API: 'B 站拒绝了请求',
+  BILI_RISK: 'B 站拒绝了请求，请稍后再试',
 });
 
 export class BiliClientError extends Error {
@@ -61,6 +67,10 @@ function fail(code, options) {
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cookieFingerprint(cookie) {
+  return createHash('sha256').update(String(cookie)).digest('hex');
 }
 
 /**
@@ -276,14 +286,6 @@ function headerValue(headers, name) {
   }
 }
 
-function parseRetryAfter(headers) {
-  const raw = headerValue(headers, 'retry-after').trim();
-  if (!raw) return 0;
-  if (/^\d+$/.test(raw)) return Math.min(6 * 60 * 60 * 1000, Number(raw) * 1000);
-  const at = Date.parse(raw);
-  return Number.isFinite(at) ? Math.min(6 * 60 * 60 * 1000, Math.max(0, at - Date.now())) : 0;
-}
-
 function serverTime(headers) {
   const at = Date.parse(headerValue(headers, 'date'));
   return Number.isFinite(at) ? at : null;
@@ -353,6 +355,7 @@ function extractCookies(headers, callbackUrl) {
 function apiFailure(payload) {
   const code = Number(payload?.code);
   if (code === -101) fail('BILI_AUTH', { apiCode: code });
+  if (code === -412) fail('BILI_RISK', { apiCode: code });
   fail('BILI_API', { apiCode: Number.isFinite(code) ? code : 0 });
 }
 
@@ -361,12 +364,33 @@ function expectPayload(value) {
   return value;
 }
 
+function requestKeyFor(endpoint, query) {
+  const [, requestPath] = endpoint;
+  const parts = [];
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === null || value === '') continue;
+    if (VOLATILE_QUERY_KEYS.has(String(key))) continue;
+    parts.push([String(key), String(value)]);
+  }
+  parts.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+  return `${requestPath}?${parts
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join('&')}`;
+}
+
 export function createBiliClient({
   fetchImpl = fetch, timeoutMs = 10_000, maxBytes = 2 * 1024 * 1024,
+  requestPolicy = null, requestScope = null,
 } = {}) {
   const timeout = Math.max(1, Number(timeoutMs) || 10_000);
   const limit = Math.max(1, Number(maxBytes) || 2 * 1024 * 1024);
   if (typeof fetchImpl !== 'function') throw new TypeError('createBiliClient requires fetch');
+  if (requestPolicy !== null && typeof requestPolicy?.run !== 'function') {
+    throw new TypeError('requestPolicy must expose run');
+  }
+  if (requestPolicy !== null && requestScope === null) {
+    throw new TypeError('requestScope is required when requestPolicy is supplied');
+  }
 
   function raceFence(promise, { deadline, signal, controller }) {
     let timer;
@@ -395,7 +419,7 @@ export function createBiliClient({
     });
   }
 
-  async function request(endpoint, { query = {}, cookie = '', signal } = {}) {
+  async function requestDirect(endpoint, { query = {}, cookie = '', signal } = {}) {
     const [host, path] = endpoint;
     const url = new URL(`https://${host}${path}`);
     for (const [key, value] of Object.entries(query)) {
@@ -433,12 +457,14 @@ export function createBiliClient({
 
     let responseHeaders = null;
     try { responseHeaders = response.headers; } catch { /* header accessors are untrusted */ }
-    const retryAfterMs = parseRetryAfter(responseHeaders);
+    const retryAfterMs = responseHeaders
+      ? parseRetryAfterHeader(headerValue(responseHeaders, 'retry-after'), { now: Date.now() })
+      : 0;
     let status = 0;
     try { status = Number(response.status) || 0; } catch { /* keep zero */ }
     let ok = false;
     try { ok = response.ok === true; } catch { /* keep false */ }
-    if (status === 429 || status === 503) {
+    if (status === 429) {
       signal?.removeEventListener('abort', abort);
       cancelBody(response);
       throw new BiliClientError('BILI_RATE_LIMIT', SAFE_MESSAGES.BILI_RATE_LIMIT, { retryAfterMs, status });
@@ -491,55 +517,109 @@ export function createBiliClient({
     return { payload: expectPayload(payload), headers: responseHeaders, serverTime: serverTime(responseHeaders) };
   }
 
+  async function resolveScope({ endpoint, cookie, query, kind, requestKey }) {
+    let scope = requestScope;
+    if (typeof scope === 'function') {
+      try {
+        scope = await scope({
+          endpoint: [...endpoint], cookie, query: { ...query }, kind, requestKey,
+        });
+      } catch {
+        fail('BILI_RESPONSE');
+      }
+    }
+    if (!isObject(scope)
+      || typeof scope.providerId !== 'string' || !scope.providerId
+      || typeof scope.accountKey !== 'string' || !scope.accountKey) {
+      fail('BILI_RESPONSE');
+    }
+    return scope;
+  }
+
+  async function perform(endpoint, options, handler) {
+    if (requestPolicy === null) return handler(await requestDirect(endpoint, options));
+    const { query = {}, cookie = '' } = options;
+    const kind = endpoint === ENDPOINTS.sessions || endpoint === ENDPOINTS.messages
+      ? 'data' : 'control';
+    const requestKey = requestKeyFor(endpoint, query);
+    const scope = await resolveScope({
+      endpoint, cookie, query, kind, requestKey,
+    });
+    const credentialVersion = scope.credentialVersion !== undefined && scope.credentialVersion !== null
+      ? scope.credentialVersion
+      : cookie ? cookieFingerprint(cookie) : undefined;
+    return requestPolicy.run({
+      providerId: scope.providerId,
+      accountKey: scope.accountKey,
+      credentialVersion,
+      workflowId: options.workflowId !== undefined && options.workflowId !== null
+        ? options.workflowId : scope.workflowId,
+      requestKey,
+      kind,
+      signal: options.signal,
+      expiresAt: options.expiresAt,
+    }, async (policySignal) => handler(await requestDirect(endpoint, {
+      ...options,
+      signal: policySignal || options.signal,
+    })));
+  }
+
   return {
-    async nav(cookie, { signal } = {}) {
+    async nav(cookie, { signal, expiresAt, workflowId } = {}) {
       const required = cookieHeader(cookie);
-      const { payload, serverTime: time } = await request(ENDPOINTS.nav, { cookie: required, signal });
-      if (payload.code !== 0) apiFailure(payload);
-      const data = payload.data;
-      if (!isObject(data)) fail('BILI_RESPONSE');
-      if (data.isLogin !== true) fail('BILI_AUTH');
-      const mid = canonicalId(data.mid);
-      if (mid === '0') fail('BILI_AUTH');
-      return {
-        mid,
-        uname: typeof data.uname === 'string' ? data.uname.slice(0, 200) : '',
-        serverTime: time,
-      };
+      return perform(ENDPOINTS.nav, {
+        cookie: required, signal, expiresAt, workflowId,
+      }, ({ payload, serverTime: time }) => {
+        if (payload.code !== 0) apiFailure(payload);
+        const data = payload.data;
+        if (!isObject(data)) fail('BILI_RESPONSE');
+        if (data.isLogin !== true) fail('BILI_AUTH');
+        const mid = canonicalId(data.mid);
+        if (mid === '0') fail('BILI_AUTH');
+        return {
+          mid,
+          uname: typeof data.uname === 'string' ? data.uname.slice(0, 200) : '',
+          serverTime: time,
+        };
+      });
     },
 
-    async generateQr({ signal } = {}) {
-      const { payload, serverTime: time } = await request(ENDPOINTS.qrGenerate, { signal });
-      if (payload.code !== 0) apiFailure(payload);
-      const data = payload.data;
-      if (!isObject(data)) fail('BILI_RESPONSE');
-      const url = typeof data.url === 'string' ? data.url : '';
-      const key = typeof data.qrcode_key === 'string' ? data.qrcode_key : '';
-      if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) fail('BILI_RESPONSE');
-      qrLoginUrl(url, key);
-      return { url, key, serverTime: time };
+    async generateQr({ signal, expiresAt } = {}) {
+      return perform(ENDPOINTS.qrGenerate, { signal, expiresAt }, ({ payload, serverTime: time }) => {
+        if (payload.code !== 0) apiFailure(payload);
+        const data = payload.data;
+        if (!isObject(data)) fail('BILI_RESPONSE');
+        const url = typeof data.url === 'string' ? data.url : '';
+        const key = typeof data.qrcode_key === 'string' ? data.qrcode_key : '';
+        if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) fail('BILI_RESPONSE');
+        qrLoginUrl(url, key);
+        return { url, key, serverTime: time };
+      });
     },
 
-    async pollQr(key, { signal } = {}) {
+    async pollQr(key, { signal, expiresAt } = {}) {
       const value = String(key ?? '');
       if (!/^[A-Za-z0-9_-]{16,128}$/.test(value)) fail('BILI_RESPONSE');
-      const { payload, headers, serverTime: time } = await request(ENDPOINTS.qrPoll, {
-        query: { qrcode_key: value }, signal,
+      return perform(ENDPOINTS.qrPoll, {
+        query: { qrcode_key: value }, signal, expiresAt,
+      }, ({ payload, headers, serverTime: time }) => {
+        if (payload.code !== 0) apiFailure(payload);
+        const data = payload.data;
+        if (!isObject(data) || typeof data.code !== 'number' || !Number.isInteger(data.code)) fail('BILI_RESPONSE');
+        const code = data.code;
+        if (code === 86101) return { state: 'waiting', code, serverTime: time };
+        if (code === 86090) return { state: 'scanned', code, serverTime: time };
+        if (code === 86038) return { state: 'expired', code, serverTime: time };
+        if (code !== 0) return { state: 'unknown', code, serverTime: time };
+        const cookie = extractCookies(headers, typeof data.url === 'string' ? data.url : '');
+        if (!cookie) fail('BILI_COOKIE');
+        return { state: 'success', code, cookie, serverTime: time };
       });
-      if (payload.code !== 0) apiFailure(payload);
-      const data = payload.data;
-      if (!isObject(data) || typeof data.code !== 'number' || !Number.isInteger(data.code)) fail('BILI_RESPONSE');
-      const code = data.code;
-      if (code === 86101) return { state: 'waiting', code, serverTime: time };
-      if (code === 86090) return { state: 'scanned', code, serverTime: time };
-      if (code === 86038) return { state: 'expired', code, serverTime: time };
-      if (code !== 0) return { state: 'unknown', code, serverTime: time };
-      const cookie = extractCookies(headers, typeof data.url === 'string' ? data.url : '');
-      if (!cookie) fail('BILI_COOKIE');
-      return { state: 'success', code, cookie, serverTime: time };
     },
 
-    async sessions(cookie, { endTs, size = 100, signal } = {}) {
+    async sessions(cookie, {
+      endTs, size = 100, signal, expiresAt, workflowId,
+    } = {}) {
       const required = cookieHeader(cookie);
       const bounded = Math.max(1, Math.min(100, Math.floor(Number(size) || 100)));
       const query = {
@@ -547,24 +627,28 @@ export function createBiliClient({
         build: 0, mobi_app: 'web',
       };
       if (endTs !== undefined && endTs !== null && endTs !== '') query.end_ts = canonicalCounter(endTs);
-      const { payload, serverTime: time } = await request(ENDPOINTS.sessions, { query, cookie: required, signal });
-      if (payload.code !== 0) apiFailure(payload);
-      const data = payload.data;
-      if (!isObject(data)) fail('BILI_RESPONSE');
-      const hasMore = pageHasMore(data.has_more);
-      const list = pageList(data.session_list);
-      if (list === null && hasMore) fail('BILI_RESPONSE');
-      if (data.system_msg !== undefined && data.system_msg !== null && !isObject(data.system_msg)) fail('BILI_RESPONSE');
-      return {
-        sessions: list || [],
-        hasMore,
-        systemMsg: isObject(data.system_msg) ? data.system_msg : null,
-        serverTime: time,
-      };
+      return perform(ENDPOINTS.sessions, {
+        query, cookie: required, signal, expiresAt, workflowId,
+      }, ({ payload, serverTime: time }) => {
+        if (payload.code !== 0) apiFailure(payload);
+        const data = payload.data;
+        if (!isObject(data)) fail('BILI_RESPONSE');
+        const hasMore = pageHasMore(data.has_more);
+        const list = pageList(data.session_list);
+        if (list === null && hasMore) fail('BILI_RESPONSE');
+        if (data.system_msg !== undefined && data.system_msg !== null && !isObject(data.system_msg)) fail('BILI_RESPONSE');
+        return {
+          sessions: list || [],
+          hasMore,
+          systemMsg: isObject(data.system_msg) ? data.system_msg : null,
+          serverTime: time,
+        };
+      });
     },
 
     async messages(cookie, {
       talkerId, sessionType = 1, beginSeqno, endSeqno, size = 100, signal,
+      expiresAt, workflowId,
     } = {}) {
       const required = cookieHeader(cookie);
       const talker = canonicalId(talkerId);
@@ -577,21 +661,24 @@ export function createBiliClient({
       };
       if (beginSeqno !== undefined && beginSeqno !== null && beginSeqno !== '') query.begin_seqno = canonicalCounter(beginSeqno);
       if (endSeqno !== undefined && endSeqno !== null && endSeqno !== '') query.end_seqno = canonicalCounter(endSeqno);
-      const { payload, serverTime: time } = await request(ENDPOINTS.messages, { query, cookie: required, signal });
-      if (payload.code !== 0) apiFailure(payload);
-      const data = payload.data;
-      if (!isObject(data)) fail('BILI_RESPONSE');
-      const hasMore = pageHasMore(data.has_more);
-      const list = pageList(data.messages);
-      if (list === null && hasMore) fail('BILI_RESPONSE');
-      return {
-        messages: list || [],
-        hasMore,
-        minSeqno: data.min_seqno === undefined || data.min_seqno === null ? null : canonicalCounter(data.min_seqno),
-        maxSeqno: data.max_seqno === undefined || data.max_seqno === null ? null : canonicalCounter(data.max_seqno),
-        eInfos: optionalList(data.e_infos),
-        serverTime: time,
-      };
+      return perform(ENDPOINTS.messages, {
+        query, cookie: required, signal, expiresAt, workflowId,
+      }, ({ payload, serverTime: time }) => {
+        if (payload.code !== 0) apiFailure(payload);
+        const data = payload.data;
+        if (!isObject(data)) fail('BILI_RESPONSE');
+        const hasMore = pageHasMore(data.has_more);
+        const list = pageList(data.messages);
+        if (list === null && hasMore) fail('BILI_RESPONSE');
+        return {
+          messages: list || [],
+          hasMore,
+          minSeqno: data.min_seqno === undefined || data.min_seqno === null ? null : canonicalCounter(data.min_seqno),
+          maxSeqno: data.max_seqno === undefined || data.max_seqno === null ? null : canonicalCounter(data.max_seqno),
+          eInfos: optionalList(data.e_infos),
+          serverTime: time,
+        };
+      });
     },
   };
 }

@@ -1,13 +1,33 @@
 # 源码来源与适配记录
 
-插件：`media-parser`，版本 `0.2.0`，日期 2026-11-25。
+插件：`media-parser`，版本 `0.4.2`，日期 2026-11-28。0.4.0 接入原生小黑盒运行时，0.4.1 增加原生 HTTP 兼容候选和有限进度诊断，0.4.2 修正已确认的扫码签名端口缺陷并保留冷却／预算分类修复；小黑盒私信已完成实验与用户真机验收，转为正式能力（`verified: true`，移除 `experimental` 标记）。均未整体复制许可证不明或未审阅的 heybox 实现。A 负责的适配代码随包附带 Apache-2.0 文本 `licenses/xiaoheihe-adapter-Apache-2.0.txt`。0.2 及更早来源记录保留于下文。
+
+## 0.3 研究与来源边界
+
+本次基于已验收的 0.2 本地代码增加平台薄适配、请求协调器和管理页调整。原始引擎、vendor 与引擎协议版本不随插件展示版本变化。
+
+HTTP 等待时间语义参考 RFC 6585 第 4 节与 RFC 9110 第 10.2.3 节。实现参数 300 秒、5 秒、每分钟预算及逐级冷却属于本插件策略，不是平台官方安全阈值。
+
+B 站业务拒绝参考 `moxingovo/dsh-bilibili` 的公开 README 对 `-101`、`-412`、`-403` 的处理说明。仅按平台和可信响应结构识别；不把所有 HTTP 403/412 当作 Cookie 失效、挑战或限流。
+
+小黑盒参考固定为 `WenfuRainbow/heybox` 提交 `afbe8a5f0629aafcd7e17d1c56eeec84ff4dd1bf` 与 `advent259141/astrbot_plugin_xiaoheihe_adapter` 提交 `534b9479e9bebe4ef82d9ec959d0c11146c90078`。后者带 Apache-2.0，本包在 `licenses/xiaoheihe-adapter-Apache-2.0.txt` 保留其许可证文本；前者许可证尚未核实，未整体复制。0.4.0 的小黑盒客户端、登录、运行时、存储、投递与验收日志为按接口约定重新实现的本插件模块，不导入其框架或加入运行依赖；研究下载文件不进交付包。哪些字段、子能力和分页尚未逐项独立证实见 [协议记录](./docs/xiaoheihe-dm-contract.md)。
+
+来源地址：
+
+```text
+https://www.rfc-editor.org/rfc/rfc6585.html#section-4
+https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3
+https://github.com/moxingovo/dsh-bilibili
+https://github.com/WenfuRainbow/heybox/tree/afbe8a5f0629aafcd7e17d1c56eeec84ff4dd1bf
+https://github.com/advent259141/astrbot_plugin_xiaoheihe_adapter/tree/534b9479e9bebe4ef82d9ec959d0c11146c90078
+```
 
 ## 原始来源
 
-- 本次移植参考：本地 QQA 插件 `E:/qqa/extensions/plugins/media-parser/`，版本 `1.0.1`。
+- 本次移植参考：原始 QQA media-parser `1.0.1` 归档。
 - 引擎上游标识：`drdon1234/astrbot_plugin_media_parser`，随原始包保留其源代码和 GNU Affero General Public License v3.0 许可证。
 - Roost 本机接口参考：`demo-x`、`echo`、`src/plugin/context.js`、`src/message.js`、`src/outbound.js`、`src/onebot/voice.js`。没有复制或修改宿主实现。
-- 本次没有取得或声称上游 Git commit。来源以这份本地归档及内容摘要为可复核基线，没有自动获取最新上游。
+- 本次没有取得或声称上游 Git commit。来源以该原始归档及内容摘要为可复核基线，没有自动获取最新上游。
 
 原始 `engine.tar.gz` 未修改，SHA-256：
 
@@ -37,20 +57,20 @@ d75f10eba41d3c202696d3da7c5c5efce1135b39401fd4cf170075e37bba9c05
 
 ## B 站登录、二维码与私信接口来源
 
-本次新增 Node 模块的接口契约参考 `pskdje/bilibili-API-collect`（master，获取日期 2026-11-25）及其本地只读副本：
+本次新增 Node 模块的接口契约参考 `pskdje/bilibili-API-collect`（master，获取日期 2026-11-25）的公开文档，摘要如下：
 
-- 私信会话与消息：`media-parser-update-20261125/references/private_msg.md`
-- 私信内容类型：同目录 `private_msg_content.md`
-- 网页扫码登录：同目录 `QR.md`
+- 私信会话与消息：`private_msg.md`（会话列表、消息分页与字段说明）。
+- 私信内容类型：`private_msg_content.md`（文字、图片、分享等内容类型）。
+- 网页扫码登录：`QR.md`（二维码申请、轮询与状态码）。
 
-扫码状态机和本地二维码实现参考 Roost `bili` 插件快照（AGPL-3.0-only，与本插件许可证兼容）：
+扫码状态机和本地二维码实现参考 Roost `bili` 插件快照中的两份文件（AGPL-3.0-only，与本插件许可证兼容），保留文件名与摘要以便复核：
 
-- `security-review-pr28/snapshot/plugins/bili/lib/qr-login.mjs`
+- `qr-login.mjs`（登录状态机）
   SHA-256 `466e4b81f8ffe482aca4f282689ada6ded67db72c538e6dfa75dad503ab3cb49`
-- `security-review-pr28/snapshot/plugins/bili/lib/qr-encode.mjs`
+- `qr-encode.mjs`（本地二维码编码）
   SHA-256 `c9cf28d9d973d7989af4c2bfd0f950afc6700009295900dedddf32608bf521e7`
 
-本地 `bili-qr.js` 改编自上述 `qr-encode.mjs`，保留纯本地二维码位矩阵和 PNG 渲染，移除了可选共享 `qrcode` 依赖加载器。没有复制原实现向插件根目录写 `cookie.txt`、记录扫码密钥或启动浏览器的做法；二维码只以内存 PNG data URL 提供。`bili-client.js`、`bili-login.js` 按上述接口文档重新实现，未把示例凭据、UID 或正文写入配置。实际账号联调仍待授权后验证。
+本地 `bili-qr.js` 改编自上述 `qr-encode.mjs`，保留纯本地二维码位矩阵和 PNG 渲染，移除了可选共享 `qrcode` 依赖加载器。没有复制原实现向插件根目录写 `cookie.txt`、记录扫码密钥或启动浏览器的做法；二维码只以内存 PNG data URL 提供。`bili-client.js`、`bili-login.js` 按上述接口文档重新实现，未把示例凭据、UID 或正文写入配置。
 
 ## Python service 适配
 

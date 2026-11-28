@@ -40,13 +40,14 @@ test.after(() => {
 test('new Bili DM defaults and poll bounds are validated', () => {
   const defaults = readConfig(context(directory()));
   assert.equal(defaults.biliDmEnabled, false);
-  assert.equal(defaults.biliDmPollSeconds, 60);
+  assert.equal(defaults.biliDmPollSeconds, 300);
   assert.equal(defaults.biliDmIncludeSystem, false);
-  assert.equal(validateConfig({ biliDmPollSeconds: 60 }).biliDmPollSeconds, 60);
+  assert.equal(validateConfig({ biliDmPollSeconds: 180 }).biliDmPollSeconds, 180);
   assert.equal(validateConfig({ biliDmPollSeconds: 1800 }).biliDmPollSeconds, 1800);
-  assert.throws(() => validateConfig({ biliDmPollSeconds: 59 }), /60～1800/);
-  assert.throws(() => validateConfig({ biliDmPollSeconds: 1801 }), /60～1800/);
-  assert.throws(() => validateConfig({ biliDmPollSeconds: 60.5 }), /60～1800/);
+  assert.equal(validateConfig({ biliDmPollSeconds: 3600 }).biliDmPollSeconds, 3600);
+  assert.throws(() => validateConfig({ biliDmPollSeconds: 179 }), /180～3600/);
+  assert.throws(() => validateConfig({ biliDmPollSeconds: 3601 }), /180～3600/);
+  assert.throws(() => validateConfig({ biliDmPollSeconds: 180.5 }), /180～3600/);
   assert.throws(() => validateConfig({ biliDmEnabled: 'yes' }), /布尔/);
 });
 

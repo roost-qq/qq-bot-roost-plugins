@@ -5,18 +5,18 @@ import { biliFixture, deferred, tick } from './bili-integration-support.mjs';
 
 test('version, exported metadata and the three private-message settings stay in sync', () => {
   const plugin = createPlugin();
-  assert.equal(VERSION, '0.2.0');
-  assert.equal(plugin.version, '0.2.0');
+  assert.equal(VERSION, '0.4.2');
+  assert.equal(plugin.version, '0.4.2');
   for (const [key, type] of [
     ['biliDmEnabled', 'boolean'],
     ['biliDmPollSeconds', 'number'],
     ['biliDmIncludeSystem', 'boolean'],
   ]) {
     assert.equal(plugin.config[key].type, type);
-    assert.equal(plugin.config[key].default, type === 'number' ? 60 : false);
+    assert.equal(plugin.config[key].default, type === 'number' ? 300 : false);
   }
-  assert.equal(plugin.config.biliDmPollSeconds.min, 60);
-  assert.equal(plugin.config.biliDmPollSeconds.max, 1800);
+  assert.equal(plugin.config.biliDmPollSeconds.min, 180);
+  assert.equal(plugin.config.biliDmPollSeconds.max, 3600);
 });
 
 test('private commands require a resolved ordinary owner C2C and fail closed without isOwner', async (t) => {

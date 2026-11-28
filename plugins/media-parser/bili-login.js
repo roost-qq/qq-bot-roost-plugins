@@ -9,27 +9,37 @@
  * leave this module except through the shared settings API.
  */
 
+import { createHash } from 'node:crypto';
 import { qrToPngDataUrl } from './bili-qr.js';
 import { SAFE_MESSAGES } from './bili-client.js';
+import { committedCredentialRevision } from './settings.js';
 
 const ACTIVE_STATES = new Set(['starting', 'waiting', 'scanned']);
 const TERMINAL_POLL_CODES = new Set(['BILI_AUTH', 'BILI_RESPONSE', 'BILI_COOKIE', 'BILI_API']);
 const KNOWN_ERROR_CODES = new Set(Object.keys(SAFE_MESSAGES).filter((code) => code !== 'BILI_CANCELLED'));
-const RETRY_MAX_MS = 6 * 60 * 60 * 1000;
+const INSPECT_CACHE_MS = 10 * 60_000;
 
 function defaultQr(text) {
   return qrToPngDataUrl(text, { ec: 'L', scale: 8, margin: 4 });
 }
 
+function cookieHash(cookie) {
+  return createHash('sha256').update(String(cookie)).digest('hex');
+}
+
 function errorFields(code, retryAfterMs = 0) {
-  const safe = KNOWN_ERROR_CODES.has(code) ? code : 'BILI_RESPONSE';
+  let safe = code;
+  if (code === 'REQUEST_COOLDOWN' || code === 'REQUEST_BUDGET') safe = 'BILI_RATE_LIMIT';
+  else if (code === 'REQUEST_DEADLINE') safe = 'BILI_TIMEOUT';
+  else if (code === 'REQUEST_POLICY_UNAVAILABLE' || code === 'REQUEST_POLICY_CLOSED') safe = 'BILI_HTTP';
+  if (!KNOWN_ERROR_CODES.has(safe)) safe = 'BILI_RESPONSE';
   const retry = Number(retryAfterMs);
   const allowRetry = safe === 'BILI_RATE_LIMIT' || safe === 'BILI_HTTP';
   return {
     errorCode: safe,
     errorSummary: SAFE_MESSAGES[safe],
     retryAfterMs: allowRetry && Number.isFinite(retry) && retry > 0
-      ? Math.min(RETRY_MAX_MS, Math.floor(retry)) : 0,
+      ? Math.floor(retry) : 0,
   };
 }
 
@@ -44,7 +54,7 @@ function errorFields(code, retryAfterMs = 0) {
  */
 export function createBiliLogin({
   settings, client, qrEncode = defaultQr, now = () => Date.now(),
-  pollIntervalMs = 3000, ttlMs = 180_000,
+  pollIntervalMs = 5000, ttlMs = 180_000, inspectCacheMs = INSPECT_CACHE_MS,
 } = {}) {
   if (!settings || typeof settings.setBiliCookie !== 'function' || typeof settings.getBiliCookie !== 'function') {
     throw new TypeError('createBiliLogin requires the shared settings API');
@@ -67,6 +77,32 @@ export function createBiliLogin({
   let errorCode = null;
   let errorSummary = null;
   let retryAfterMs = 0;
+  let inspectCache = null;
+
+  function clearInspectCache() {
+    inspectCache = null;
+  }
+
+  function cachedInspection(cookie) {
+    if (!inspectCache) return null;
+    if (inspectCache.hash !== cookieHash(cookie)) return null;
+    if (now() >= inspectCache.expiresAt) {
+      inspectCache = null;
+      return null;
+    }
+    return inspectCache.nav;
+  }
+
+  function rememberInspection(cookie, nav) {
+    if (!cookie || !nav || !nav.mid) return;
+    const ttl = Math.max(0, Number(inspectCacheMs) || 0);
+    if (ttl <= 0) return;
+    inspectCache = {
+      hash: cookieHash(cookie),
+      expiresAt: now() + ttl,
+      nav: { mid: String(nav.mid), uname: typeof nav.uname === 'string' ? nav.uname : '' },
+    };
+  }
 
   const cookieRevision = () => (typeof settings.getBiliCookieRevision === 'function'
     ? settings.getBiliCookieRevision() : 0);
@@ -74,6 +110,7 @@ export function createBiliLogin({
   const unsubscribe = typeof settings.subscribeBiliCookie === 'function'
     ? settings.subscribeBiliCookie(() => {
       if (internalChange || disposed) return;
+      clearInspectCache();
       invalidateOperations();
       if (session) {
         generation += 1;
@@ -85,8 +122,22 @@ export function createBiliLogin({
     : () => {};
 
   function status() {
-    return {
+    const base = {
       state, expiresAt, pngDataUrl, errorCode, errorSummary, retryAfterMs,
+    };
+    // Active/terminal QR session states always win over the cached nav check.
+    if (session || state !== 'idle') return base;
+    let cookie = '';
+    try { cookie = String(settings.getBiliCookie() || ''); } catch { cookie = ''; }
+    if (!cookie) return base;
+    const nav = cachedInspection(cookie);
+    if (!nav) return base;
+    // Read-only cached validation. Account identity stays private and the
+    // cache expiry is explicit so the page cannot claim valid indefinitely.
+    return {
+      ...base,
+      state: 'valid',
+      expiresAt: inspectCache?.expiresAt ?? null,
     };
   }
 
@@ -94,6 +145,16 @@ export function createBiliLogin({
     errorCode = null;
     errorSummary = null;
     retryAfterMs = 0;
+  }
+
+  function settleExplicitSuccess() {
+    // An explicit successful check supersedes a stale terminal QR error, but
+    // must never disturb an in-flight QR session. This path stays local.
+    if (session || ACTIVE_STATES.has(state)) return;
+    state = 'idle';
+    expiresAt = null;
+    pngDataUrl = null;
+    clearError();
   }
 
   function applyError(code, retry = 0) {
@@ -169,6 +230,21 @@ export function createBiliLogin({
       && !op.controller.signal.aborted && cookieRevision() === op.revision;
   }
 
+  // The operation's own credential commit legitimately advances the revision.
+  // A post-commit metadata failure must therefore validate the exact commit
+  // this operation produced instead of reusing the pre-commit revision guard.
+  // Any later external or newer-generation commit fails this check.
+  function ownsCommittedRevision(op, committedRevision, expectedCookie) {
+    if (disposed || op.generation !== manualGeneration) return false;
+    if (op.controller.signal.aborted) return false;
+    if (cookieRevision() !== committedRevision) return false;
+    try {
+      return String(settings.getBiliCookie?.() ?? '') === expectedCookie;
+    } catch {
+      return false;
+    }
+  }
+
   function armExpiry(current) {
     if (!isCurrent(current) || current.expiryTimer) return;
     const remaining = current.expiresAt - now();
@@ -213,6 +289,15 @@ export function createBiliLogin({
     finish(current, 'expired');
   }
 
+  function waitOutlivesQr(current, error, retryAfterMs) {
+    const code = String(error?.code || '');
+    if (code === 'REQUEST_DEADLINE') return true;
+    if (code !== 'REQUEST_COOLDOWN' && code !== 'REQUEST_BUDGET') return false;
+    const next = Number.isFinite(error?.nextAllowedAt)
+      ? error.nextAllowedAt : (retryAfterMs > 0 ? now() + retryAfterMs : 0);
+    return next > 0 && next >= current.expiresAt;
+  }
+
   async function completeLogin(current, cookie) {
     if (!isCurrent(current) || now() >= current.expiresAt) {
       if (isCurrent(current)) expire(current);
@@ -220,7 +305,11 @@ export function createBiliLogin({
     }
     let nav;
     try {
-      nav = await client.nav(cookie, { signal: current.controller.signal });
+      nav = await client.nav(cookie, {
+        signal: current.controller.signal,
+        expiresAt: current.expiresAt,
+        workflowId: current.workflowId,
+      });
     } catch (error) {
       if (!isCurrent(current)) return;
       if (error?.code === 'BILI_CANCELLED') return;
@@ -250,13 +339,14 @@ export function createBiliLogin({
       internalChange = false;
       if (!isCurrent(current)) return;
       finish(current, 'error');
-      applyError('BILI_COOKIE');
+      applyError('BILI_STORAGE');
       return;
     } finally {
       internalChange = false;
     }
     if (!isCurrent(current)) return;
     clearSession();
+    clearInspectCache();
     state = 'success';
     clearError();
   }
@@ -270,10 +360,17 @@ export function createBiliLogin({
 
     let result;
     try {
-      result = await client.pollQr(current.key, { signal: current.controller.signal });
+      result = await client.pollQr(current.key, {
+        signal: current.controller.signal,
+        expiresAt: current.expiresAt,
+      });
     } catch (error) {
       if (!isCurrent(current)) return;
       if (error?.code === 'BILI_CANCELLED') return;
+      if (waitOutlivesQr(current, error, Number(error?.retryAfterMs) || 0)) {
+        expire(current);
+        return;
+      }
       const fields = applyError(error?.code, error?.retryAfterMs);
       if (TERMINAL_POLL_CODES.has(fields.errorCode)) {
         finish(current, 'error');
@@ -319,6 +416,7 @@ export function createBiliLogin({
       timer: null,
       expiryTimer: null,
       key: '',
+      workflowId: `qr-${generation}`,
       startedAt,
       expiresAt: startedAt + Math.max(1, ttlMs),
       cookieRevision: cookieRevision(),
@@ -332,12 +430,19 @@ export function createBiliLogin({
 
     let generated;
     try {
-      generated = await client.generateQr({ signal: current.controller.signal });
+      generated = await client.generateQr({
+        signal: current.controller.signal,
+        expiresAt: current.expiresAt,
+      });
     } catch (error) {
       if (!isCurrent(current)) return status();
       if (error?.code === 'BILI_CANCELLED') {
         finish(current, 'idle');
         clearError();
+        return status();
+      }
+      if (waitOutlivesQr(current, error, Number(error?.retryAfterMs) || 0)) {
+        expire(current);
         return status();
       }
       const fields = applyError(error?.code, error?.retryAfterMs);
@@ -385,12 +490,16 @@ export function createBiliLogin({
   }
 
   async function inspectCurrent({ withAccount }) {
-    const op = beginOperation('inspect');
     const cookie = String(settings.getBiliCookie?.() || '');
-    if (!cookie) {
-      finishOperation(op);
-      return { state: 'missing' };
+    if (!cookie) return { state: 'missing' };
+    const cached = cachedInspection(cookie);
+    if (cached) {
+      if (!withAccount) settleExplicitSuccess();
+      return withAccount
+        ? { state: 'valid', mid: cached.mid, uname: cached.uname }
+        : { state: 'valid' };
     }
+    const op = beginOperation('inspect');
     let nav;
     try {
       nav = await client.nav(cookie, { signal: op.controller.signal });
@@ -399,13 +508,18 @@ export function createBiliLogin({
       finishOperation(op);
       if (!current || error?.code === 'BILI_CANCELLED') return { state: 'cancelled' };
       const fields = errorFields(error?.code, error?.retryAfterMs);
-      if (fields.errorCode === 'BILI_AUTH') return { state: 'invalid', ...fields };
+      if (fields.errorCode === 'BILI_AUTH') {
+        clearInspectCache();
+        return { state: 'invalid', ...fields };
+      }
       return { state: 'error', ...fields };
     }
     const current = isOperationCurrent(op);
     finishOperation(op);
     if (!current) return { state: 'cancelled' };
     if (!nav || !nav.mid) return { state: 'error', ...errorFields('BILI_RESPONSE') };
+    rememberInspection(cookie, nav);
+    if (!withAccount) settleExplicitSuccess();
     if (!withAccount) return { state: 'valid' };
     return { state: 'valid', mid: nav.mid, uname: nav.uname || '' };
   }
@@ -472,12 +586,15 @@ export function createBiliLogin({
       await settings.setBiliCookie(value, {
         guard: () => !disposed && isOperationCurrent(op),
       });
-    } catch {
+    } catch (error) {
       internalChange = false;
-      const current = isOperationCurrent(op);
+      const committedRevision = committedCredentialRevision(error);
+      const current = committedRevision === null
+        ? isOperationCurrent(op)
+        : ownsCommittedRevision(op, committedRevision, value);
       finishOperation(op);
       if (!current) return { ok: false, state: 'cancelled' };
-      const fields = errorFields('BILI_COOKIE');
+      const fields = errorFields('BILI_STORAGE');
       applyError(fields.errorCode);
       return { ok: false, state: 'error', ...fields };
     } finally {
@@ -489,6 +606,7 @@ export function createBiliLogin({
       return { ok: false, state: 'cancelled' };
     }
     finishOperation(op);
+    clearInspectCache();
     state = 'success';
     pngDataUrl = null;
     expiresAt = null;
@@ -500,12 +618,13 @@ export function createBiliLogin({
     generation += 1;
     invalidateOperations();
     clearSession();
+    clearInspectCache();
     clearError();
     try {
       await settings.clearBiliCookie({ guard: () => !disposed });
     } catch {
       if (disposed) return { ok: false, state: 'cancelled' };
-      const fields = errorFields('BILI_COOKIE');
+      const fields = errorFields('BILI_STORAGE');
       applyError(fields.errorCode);
       state = 'error';
       return { ok: false, state: 'error', ...fields };

@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { migratePollSeconds } from './private-message-request-policy.js';
 
 export const PLATFORM_IDS = Object.freeze([
   'bilibili', 'douyin', 'kuaishou', 'acfun', 'hongguo', 'netease', 'ximalaya',
@@ -29,18 +30,48 @@ export const DEFAULTS = Object.freeze({
   sendCaption: true, handleTextOnly: false, audioMode: 'auto',
   cacheSeconds: 1800, hotComments: 0, translation: false,
   pythonPath: '', ffmpegPath: '', externalCacheRoot: '',
-  biliDmEnabled: false, biliDmPollSeconds: 60, biliDmIncludeSystem: false,
+  biliDmEnabled: false, biliDmPollSeconds: 300, biliDmIncludeSystem: false,
+  xiaoheiheDmEnabled: false, xiaoheiheDmPollSeconds: 300,
 });
 
 const NUMBERS = {
   maxLinks: [1, 3], maxFileMiB: [1, 200], timeoutSeconds: [5, 300],
   concurrency: [1, 8], queueLimit: [0, 100], queueWaitSeconds: [1, 30],
   dedupeSeconds: [0, 3600], cacheSeconds: [60, 86400], hotComments: [0, 20],
-  biliDmPollSeconds: [60, 1800],
+  biliDmPollSeconds: [180, 3600],
+  xiaoheiheDmPollSeconds: [180, 3600],
 };
+function rawConfigValue(ctx, key) {
+  const raw = ctx?.config?.[key];
+  return raw && typeof raw === 'object' && 'default' in raw ? raw.default : raw;
+}
 const SECRET_KEY = /(?:cookie|token|password|passwd|secret|api[_-]?key|authorization|access[_-]?key|credential)/i;
 const UNSAFE_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+const PRIVATE_PROVIDER_KEY = 'privateMessageProviders';
+const PRIVATE_PROVIDER_IDS = new Set(['xiaoheihe']);
 export const MASK = '••••••••';
+
+// A credential transaction can fail after its atomic rename has already
+// committed. Callers must be able to tell that bounded fact apart from a
+// cancellation, without the error ever carrying the committed Cookie.
+const COMMITTED_REVISION = Symbol('biliCommittedRevision');
+
+export function committedCredentialRevision(error) {
+  const value = error !== null && (typeof error === 'object' || typeof error === 'function')
+    ? error[COMMITTED_REVISION] : undefined;
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function markCommittedRevision(error, revision) {
+  if (error !== null && (typeof error === 'object' || typeof error === 'function')) {
+    try {
+      Object.defineProperty(error, COMMITTED_REVISION, {
+        value: revision, enumerable: false, configurable: true,
+      });
+    } catch { /* a frozen error still propagates as a real IO failure */ }
+  }
+  return error;
+}
 
 export function readConfig(ctx) {
   const out = {};
@@ -57,6 +88,9 @@ export function readConfig(ctx) {
   }
   if (!['managed', 'external'].includes(out.engineMode)) out.engineMode = DEFAULTS.engineMode;
   if (!['auto', 'voice', 'file'].includes(out.audioMode)) out.audioMode = 'auto';
+  // The native Xiaoheihe capability is available and selectable. Its default
+  // stays off; an explicit user save of true or false is preserved here so the
+  // dedicated runtime can honour the operator's choice without a hidden clamp.
   return out;
 }
 
@@ -225,9 +259,66 @@ async function writeJson(file, data, { guard } = {}) {
 }
 
 const BILI_COOKIE_MAX = 8192;
+const PRIVATE_PROVIDER_MAX_BYTES = 128 * 1024;
 
 function hasOwn(value, key) {
   return isObject(value) && Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function containsPrivateProviderKey(value, depth = 0) {
+  if (depth > 14 || !isObject(value)) return false;
+  for (const [key, child] of Object.entries(value)) {
+    if (key === PRIVATE_PROVIDER_KEY) return true;
+    if (containsPrivateProviderKey(child, depth + 1)) return true;
+  }
+  return false;
+}
+
+function withoutPrivateProviderKeys(value, depth = 0) {
+  if (depth > 14 || !isObject(value)) return value;
+  const out = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (key === PRIVATE_PROVIDER_KEY) continue;
+    out[key] = isObject(child) ? withoutPrivateProviderKeys(child, depth + 1) : child;
+  }
+  return out;
+}
+
+function requirePrivateProviderId(providerId) {
+  const id = String(providerId ?? '');
+  if (!PRIVATE_PROVIDER_IDS.has(id)) throw new Error('未知或未验证的私信平台');
+  return id;
+}
+
+/**
+ * Keep only the dedicated non-engine private-message credential partition.
+ * Legacy or accidental copies under `upstream` are removed so a generic
+ * engine configuration merge can never receive these secrets.
+ */
+function normalizePrivateMessageProviders(credentials) {
+  if (!isObject(credentials)) return;
+  const box = credentials[PRIVATE_PROVIDER_KEY];
+  if (!isObject(box)) {
+    delete credentials[PRIVATE_PROVIDER_KEY];
+  } else {
+    for (const id of Object.keys(box)) {
+      if (!PRIVATE_PROVIDER_IDS.has(id) || !isObject(box[id])) delete box[id];
+    }
+    if (!Object.keys(box).length) delete credentials[PRIVATE_PROVIDER_KEY];
+  }
+  if (isObject(credentials.upstream)) {
+    delete credentials.upstream[PRIVATE_PROVIDER_KEY];
+  }
+}
+
+function privateProviderHints(value, prefix = '', out = {}) {
+  if (!isObject(value)) return out;
+  for (const [key, item] of Object.entries(value)) {
+    const full = prefix ? `${prefix}.${key}` : key;
+    if (isObject(item)) privateProviderHints(item, full, out);
+    else out[full] = { set: Boolean(item), value: item ? MASK : '' };
+  }
+  return out;
 }
 
 /** Return the canonical Bili cookie, preferring the legacy upstream location. */
@@ -282,7 +373,19 @@ export function createSettings(ctx, { initialBarrier, isActive } = {}) {
   let advanced = engineDefaults();
   let credentials = {};
   let cookieRevision = 0;
+  // Opaque UI ordering token. It is random rather than an account id or a
+  // cookie fingerprint, and rotates exactly when the Bili credential changes.
+  let biliAccountEpoch = randomUUID();
+  // Public numeric ordering value consumed by the page. It is a bounded
+  // per-bot counter, never an account id, Cookie hash or target id.
+  let biliSessionVersion = 0;
+  const nextSessionVersion = (previous = biliSessionVersion) => Math.min(
+    Math.max(1, Date.now() - 1),
+    Math.max(1, Math.floor(Number(previous) || 0) + 1),
+  );
   let writeTail = Promise.resolve();
+  let runtimeConfigOverride = {};
+  let migrationNotice = '';
   const cookieListeners = new Set();
   const runtimeActive = () => {
     if (typeof isActive !== 'function') return true;
@@ -305,13 +408,25 @@ export function createSettings(ctx, { initialBarrier, isActive } = {}) {
       return runtimeActive();
     };
   };
+  // A successful credential rename owns the revision and cookie it just
+  // committed. Follow-up metadata writes must stay bound to that commit and
+  // the active runtime, but must not re-run a caller guard whose revision
+  // field was intentionally advanced by this same commit.
+  const postCommitGuard = () => {
+    const committedCookie = readCanonicalBiliCookie(credentials);
+    const committedRevision = cookieRevision;
+    return () => runtimeActive()
+      && cookieRevision === committedRevision
+      && readCanonicalBiliCookie(credentials) === committedCookie;
+  };
   const serial = (fn) => {
     const result = writeTail.then(fn);
     writeTail = result.catch(() => {});
     return result;
   };
+  const configured = () => ({ ...readConfig(ctx), ...runtimeConfigOverride });
   const normalize = (target = advanced) => {
-    const cfg = readConfig(ctx);
+    const cfg = configured();
     target.parsers ??= {};
     for (const id of PLATFORM_IDS) {
       if (!PLATFORM_MODES.includes(target.parsers[id])) target.parsers[id] = '全部发送';
@@ -328,27 +443,63 @@ export function createSettings(ctx, { initialBarrier, isActive } = {}) {
       max_audio_size_mb: Math.min(Number(target.download?.max_audio_size_mb) || cfg.maxFileMiB, cfg.maxFileMiB),
     };
   };
-  const publishCookie = (before) => {
+  const publishCookie = async (before) => {
     const after = readCanonicalBiliCookie(credentials);
-    if (after === before) return;
+    if (after === before) return false;
     cookieRevision += 1;
+    biliAccountEpoch = randomUUID();
+    biliSessionVersion = nextSessionVersion();
+    advanced.privateMessageSessionVersion = biliSessionVersion;
     const event = { revision: cookieRevision, hasCookie: Boolean(after) };
     for (const listener of [...cookieListeners]) {
       try {
         const result = listener(event);
-        if (result && typeof result.then === 'function') Promise.resolve(result).catch(() => {});
+        if (result && typeof result.then === 'function') {
+          // Cookie saves complete only after the policy credential update has
+          // entered its durable commit tail; teardown cannot race this write.
+          await Promise.resolve(result).catch(() => {});
+        }
       } catch { /* a subscriber cannot break storage */ }
     }
+    return true;
   };
   const ready = serial(async () => {
     if (initialBarrier) await initialBarrier;
     assertActive();
-    const loaded = splitSecrets(await readJson(advancedFile, {}));
+    // The advanced engine file must never be a second storage location for
+    // private-message credentials, including nested upstream spellings.
+    const loaded = splitSecrets(withoutPrivateProviderKeys(await readJson(advancedFile, {})));
     advanced = deepMerge(advanced, loaded.clean);
     const loadedCredentials = deepMerge(await readJson(credentialsFile, {}), loaded.secrets);
     normalizeBiliCookie(loadedCredentials);
+    normalizePrivateMessageProviders(loadedCredentials);
     credentials = loadedCredentials;
     cookieRevision = readCanonicalBiliCookie(credentials) ? 1 : 0;
+    biliAccountEpoch = randomUUID();
+    biliSessionVersion = nextSessionVersion(advanced.privateMessageSessionVersion);
+    advanced.privateMessageSessionVersion = biliSessionVersion;
+    if (advanced.privateMessageConfigVersion !== 1) {
+      const rawPoll = rawConfigValue(ctx, 'biliDmPollSeconds');
+      if (rawPoll === undefined || rawPoll === null) {
+        advanced.privateMessageConfigVersion = 1;
+      } else {
+        const migration = migratePollSeconds(rawPoll);
+        if (!migration.migrated) {
+          advanced.privateMessageConfigVersion = 1;
+        } else {
+          runtimeConfigOverride = { biliDmPollSeconds: migration.seconds };
+          migrationNotice = `原 ${migration.originalSeconds ?? '未记录'} 秒已调整为 ${migration.seconds} 秒，以减少连续请求；当前允许范围为 180–3600 秒`;
+          try {
+            if (typeof ctx.setConfig !== 'function') throw new Error('host cannot save migrated config');
+            await ctx.setConfig({ biliDmPollSeconds: migration.seconds });
+            runtimeConfigOverride = {};
+            advanced.privateMessageConfigVersion = 1;
+          } catch {
+            migrationNotice += '。配置迁移尚未完成，当前运行已使用安全下限；修复宿主写入后请重新保存间隔。';
+          }
+        }
+      }
+    }
     normalize();
     assertActive();
     const guard = commitGuard();
@@ -357,8 +508,9 @@ export function createSettings(ctx, { initialBarrier, isActive } = {}) {
   });
   const api = {
     ready, advancedFile, credentialsFile,
-    current: () => ({ ...readConfig(ctx), platformModes: { ...advanced.parsers } }),
-    publicConfig: () => ({ ...readConfig(ctx) }),
+    current: () => ({ ...configured(), platformModes: { ...advanced.parsers } }),
+    publicConfig: () => ({ ...configured() }),
+    configMigration: () => ({ complete: advanced.privateMessageConfigVersion === 1, notice: migrationNotice }),
     advanced: () => redact(copy(advanced), secretValues(credentials)),
     sanitize: (value) => redact(value, secretValues(credentials)),
     credentialHints: () => {
@@ -379,6 +531,17 @@ export function createSettings(ctx, { initialBarrier, isActive } = {}) {
     })),
     getBiliCookie: () => readCanonicalBiliCookie(credentials),
     getBiliCookieRevision: () => cookieRevision,
+    getBiliAccountEpoch: () => biliAccountEpoch,
+    getBiliSessionVersion: () => biliSessionVersion,
+    getPrivateMessageProviderCredentials(providerId) {
+      const id = requirePrivateProviderId(providerId);
+      const value = credentials?.[PRIVATE_PROVIDER_KEY]?.[id];
+      return isObject(value) ? copy(value) : {};
+    },
+    privateMessageProviderCredentialHints(providerId) {
+      const id = requirePrivateProviderId(providerId);
+      return privateProviderHints(credentials?.[PRIVATE_PROVIDER_KEY]?.[id] ?? {}, '');
+    },
     subscribeBiliCookie(listener) {
       if (typeof listener !== 'function') throw new Error('订阅回调必须是函数');
       cookieListeners.add(listener);
@@ -398,11 +561,22 @@ export function createSettings(ctx, { initialBarrier, isActive } = {}) {
         const next = deepMerge(credentials, patch);
         dropStaleNestedBiliCookie(next, patch);
         normalizeBiliCookie(next);
+        normalizePrivateMessageProviders(next);
         // Recheck the commit guard after the temporary file exists and directly
         // before rename. A cancel during writeFile must not commit late Cookie.
         await writeJson(credentialsFile, next, { guard: commitGuard(guard) });
         credentials = next;
-        publishCookie(before);
+        if (await publishCookie(before)) {
+          try {
+            await writeJson(advancedFile, advanced, { guard: postCommitGuard() });
+          } catch (error) {
+            // The credential rename already succeeded and its revision is
+            // durable. Surface the metadata failure with only the committed
+            // revision so the caller can report a storage error instead of a
+            // late cancellation. Nothing credential-shaped is attached.
+            throw markCommittedRevision(error, cookieRevision);
+          }
+        }
         return { ok: true, hasCookie: Boolean(readCanonicalBiliCookie(credentials)) };
       });
     },
@@ -423,6 +597,14 @@ export function createSettings(ctx, { initialBarrier, isActive } = {}) {
         if (guardFails(guard)) {
           throw new Error('维护会话已失效，未保存配置');
         }
+        // Only an explicit successful Bili interval save can complete the Bili
+        // migration. Saving Xhh or an unrelated field must not clear the safe
+        // runtime override or mark the still-unwritten Bili disk value valid.
+        if (Object.prototype.hasOwnProperty.call(valid, 'biliDmPollSeconds')) {
+          runtimeConfigOverride = {};
+          migrationNotice = '';
+          advanced.privateMessageConfigVersion = 1;
+        }
         normalize();
         await writeJson(advancedFile, advanced, { guard: commitGuard(guard) });
         return api.publicConfig();
@@ -431,6 +613,7 @@ export function createSettings(ctx, { initialBarrier, isActive } = {}) {
     async saveAdvanced(patch, { guard } = {}) {
       if (!isObject(patch) || Buffer.byteLength(JSON.stringify(patch)) > 256 * 1024) throw new Error('高级配置必须是 256 KiB 内的 JSON 对象');
       assertTree(patch);
+      if (containsPrivateProviderKey(patch)) throw new Error('私信平台凭据请使用独立分区保存');
       if (patch.parsers && (!isObject(patch.parsers) || Object.entries(patch.parsers).some(([id, mode]) => !PLATFORM_IDS.includes(id) || !PLATFORM_MODES.includes(mode)))) throw new Error('平台 ID 或输出模式不合法');
       await ready;
       return serial(async () => {
@@ -446,18 +629,22 @@ export function createSettings(ctx, { initialBarrier, isActive } = {}) {
         const nextCredentials = deepMerge(credentials, parts.secrets);
         dropStaleNestedBiliCookie(nextCredentials, parts.secrets);
         normalizeBiliCookie(nextCredentials);
+        normalizePrivateMessageProviders(nextCredentials);
         normalize(nextAdvanced);
         await writeJson(advancedFile, nextAdvanced, { guard: commitGuard(guard) });
         await writeJson(credentialsFile, nextCredentials, { guard: commitGuard(guard) });
         advanced = nextAdvanced;
         credentials = nextCredentials;
-        publishCookie(before);
+        if (await publishCookie(before)) {
+          await writeJson(advancedFile, advanced, { guard: postCommitGuard() });
+        }
         return api.advanced();
       });
     },
     async saveCredentials(patch, { guard } = {}) {
       if (!isObject(patch)) throw new Error('凭据必须是 JSON 对象');
       assertTree(patch);
+      if (containsPrivateProviderKey(patch)) throw new Error('私信平台凭据请使用独立分区保存');
       if (Buffer.byteLength(JSON.stringify(patch)) > 128 * 1024) throw new Error('凭据过大');
       const parts = splitSecrets(patch);
       const hasLeaf = (obj) => Object.values(obj).some((x) => isObject(x) ? hasLeaf(x) : x !== undefined);
@@ -472,10 +659,63 @@ export function createSettings(ctx, { initialBarrier, isActive } = {}) {
         const next = deepMerge(credentials, parts.secrets);
         dropStaleNestedBiliCookie(next, parts.secrets);
         normalizeBiliCookie(next);
+        normalizePrivateMessageProviders(next);
         await writeJson(credentialsFile, next, { guard: commitGuard(guard) });
         credentials = next;
-        publishCookie(before);
+        if (await publishCookie(before)) {
+          await writeJson(advancedFile, advanced, { guard: postCommitGuard() });
+        }
         return api.credentialHints();
+      });
+    },
+    async setPrivateMessageProviderCredentials(providerId, patch, { guard, replace = false } = {}) {
+      const id = requirePrivateProviderId(providerId);
+      if (!isObject(patch)) throw new Error('私信凭据必须是 JSON 对象');
+      const exact = replace === true;
+      assertTree(patch);
+      if (Buffer.byteLength(JSON.stringify(patch)) > PRIVATE_PROVIDER_MAX_BYTES) throw new Error('私信凭据过大');
+      await ready;
+      return serial(async () => {
+        assertActive();
+        if (guardFails(guard)) throw new Error('维护会话已失效，未保存私信凭据');
+        const before = readCanonicalBiliCookie(credentials);
+        const next = copy(credentials);
+        const box = isObject(next[PRIVATE_PROVIDER_KEY]) ? next[PRIVATE_PROVIDER_KEY] : {};
+        // A logout tombstone must erase every prior secret in this platform's
+        // partition, including fields this build no longer knows about. Exact
+        // replacement stays scoped to the target provider; other platforms,
+        // Bili credentials and the rest of the store are copied untouched.
+        box[id] = exact ? copy(patch) : deepMerge(isObject(box[id]) ? box[id] : {}, patch);
+        next[PRIVATE_PROVIDER_KEY] = box;
+        normalizeBiliCookie(next);
+        normalizePrivateMessageProviders(next);
+        await writeJson(credentialsFile, next, { guard: commitGuard(guard) });
+        credentials = next;
+        await publishCookie(before);
+        return {
+          ok: true,
+          providerId: id,
+          hints: api.privateMessageProviderCredentialHints(id),
+        };
+      });
+    },
+    async clearPrivateMessageProviderCredentials(providerId, options = {}) {
+      const id = requirePrivateProviderId(providerId);
+      await ready;
+      return serial(async () => {
+        assertActive();
+        if (guardFails(options.guard)) throw new Error('维护会话已失效，未保存私信凭据');
+        const before = readCanonicalBiliCookie(credentials);
+        const next = copy(credentials);
+        if (isObject(next[PRIVATE_PROVIDER_KEY])) {
+          delete next[PRIVATE_PROVIDER_KEY][id];
+        }
+        normalizeBiliCookie(next);
+        normalizePrivateMessageProviders(next);
+        await writeJson(credentialsFile, next, { guard: commitGuard(options.guard) });
+        credentials = next;
+        await publishCookie(before);
+        return { ok: true, providerId: id };
       });
     },
     flush: () => writeTail,
